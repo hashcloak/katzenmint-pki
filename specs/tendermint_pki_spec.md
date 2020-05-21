@@ -1,8 +1,16 @@
-## Description
-
-### Overview
+## Overview
 
 We propose a mixnet PKI system using Tendermint as its consensus engine. Tendermint is a general purpose, state machine replication system. Validators in the Tendermint system vote on blocks of transactions and upon receiving enough votes, the block gets commits to a hash chain of blocks, known as a blockchain.
+
+In this system, authorities act as Tendermint validators and handle the chain's consensus. In addition to their responsibilities as validators, they still carry out their responsibilities as outlined in (insert link to katzenpost pki spec).
+
+Valid consensus documents, mix descriptors and authority set changes are different transactions types that are batched into blocks and voted upon by authorities. 
+
+Mix nodes and clients use the Tendermint light client system to retrieve information from the blockchain without having the responsilities of a full, Tendermint node. This reduces the communication mix nodes and clients need to do with validators. Mix nodes and clients' responsibilities remain the same as outlined in the katzenpost PKI spec.
+
+Providers responsibilities' are reduced in this PKI system. They no longer need to cache consensus documents for clients to fetch. Instead, they can (perhaps MAY is a better term here) serve as full nodes for the overall availability of the Tendermint blockchain.
+
+## Description
 
 ### Security Goals
 The security goals of this Directory Authority system remain the same with the addition of the following goals and features:
@@ -194,12 +202,12 @@ Now that we are using Tendermint, we will be considering the following transacti
             - `power` is the authority's voting power. 
                 - To remove an authority, set its voting power to 0.
 
-### Consensus
+### Configuration
 
-### Initialization
+#### Initialization
 In order to define the behavior of this chain at startup, one needs to define the parameters in the `genesis.json` file. 
 
-#### Parameters to set
+##### Parameters to set
 - `genesis_time`: Time the blockchain starts. For our pursposes, this can be the time the mixnet starts.
 - `chain_id`: ID of the blockchain. Effectively, this can change for major changes made to the blockchain. Can be used to delineate different versions of the chain.
 - `consensus_params`:
@@ -218,7 +226,13 @@ For more information about `genesis.json`, see https://github.com/tendermint/ten
 The main differences between the current PKI system and this proposed system are:
 - Authorities are selected in a round robin fashion to propose blocks as part of the tendermint consensus protocol.
 - There is no randomness generation (NOTE: This can be added either through using Core Star's Tendermint fork or having a transaction that outputs the result of the regular shared randomness beacon)
-- 
+- This tendermint-based authority system favors consistency over availability in a distributed systems sense.
+- This protocol tolerates up to a 1/3 of authorities being byzantine.
+
+## Privacy Considerations
+
+- The list of authorities, mix descriptors and consensus documents are publicly posted on a public blockchain. Anyone can look at these transactions.
+- Information retrieval using the light client system and transaction broadcasting are not privacy-preserving, by default, in Tendermint.
 
 
 ## Implementation Considerations
@@ -227,7 +241,11 @@ The main differences between the current PKI system and this proposed system are
 
 ## Future Considerations
 - Incentivization via an external cryptocurrency (e.g. Zcash)
+- Slashing penalties for misbehavior
 - More permissionless enrollment of authorities
     - A Sybil-resistance mechanism for enrolling authorities
 - PIR-like techniques for light clients
 - Using [Core Star's Tendermint fork with an embedded BLS random beacon](https://github.com/corestario/tendermint)
+
+## References
+TODO: Add references

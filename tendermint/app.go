@@ -1,10 +1,25 @@
 package tendermint
 
 import (
+	"log"
+
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type KatzenmintApplication struct {
+	state  *KatzenmintState
+	logger log.Logger
+}
+
+type descriptor struct {
+	desc *pki.MixDescriptor
+	raw  []byte
+}
+
+type document struct {
+	doc *pki.Document
+	raw []byte
 }
 
 func NewKatzenmintApplication() *KatzenmintApplication {

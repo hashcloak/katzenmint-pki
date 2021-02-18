@@ -112,6 +112,23 @@ func (app *KVStoreApplication) Query(query abcitypes.RequestQuery) (resQuery abc
 	return
 }
 
+// TODO: state sync connection
+func (app *KVStoreApplication) ListSnapshots(req abcitypes.RequestListSnapshots) (res abcitypes.ResponseListSnapshots) {
+	return
+}
+
+func (app *KVStoreApplication) OfferSnapshot(req abcitypes.RequestOfferSnapshot) (res abcitypes.ResponseOfferSnapshot) {
+	return
+}
+
+func (app *KVStoreApplication) LoadSnapshotChunk(req abcitypes.RequestLoadSnapshotChunk) (res abcitypes.ResponseLoadSnapshotChunk) {
+	return
+}
+
+func (app *KVStoreApplication) ApplySnapshotChunk(req abcitypes.RequestApplySnapshotChunk) (res abcitypes.ResponseApplySnapshotChunk) {
+	return
+}
+
 func (KVStoreApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	return abcitypes.ResponseInitChain{}
 }

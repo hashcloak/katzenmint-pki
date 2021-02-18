@@ -2,7 +2,7 @@
 
 ## Instructions
 
-1. [Install tendermint](https://docs.tendermint.com/master/introduction/install.html)
+1. [Install tendermint v0.34.6](https://docs.tendermint.com/master/introduction/install.html)
 2. `TMHOME=`pwd`/chain tendermint init`
 3. `go build`
 4. `./katzenmint_abci_app -config ./chain/config/config.toml`

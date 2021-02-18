@@ -22,7 +22,10 @@ import (
 	"github.com/tendermint/tendermint/proxy"
 )
 
-var configFile string
+var (
+	configFile string
+	dbPath     string
+)
 
 func newTendermint(app abci.Application, configFile string) (*nm.Node, error) {
 	// read config
@@ -78,18 +81,21 @@ func newTendermint(app abci.Application, configFile string) (*nm.Node, error) {
 
 func init() {
 	flag.StringVar(&configFile, "config", "$HOME/.tendermint/config/config.toml", "Path to config.toml")
+	flag.StringVar(&dbPath, "db", "", "Path to katzenmint database")
+	flag.Parse()
 }
 
 func main() {
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	if len(dbPath) == 0 {
+		dbPath = filepath.Join(os.TempDir(), "katzenmint")
+	}
+	db, err := badger.Open(badger.DefaultOptions(dbPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 	app := NewKVStoreApplication(db)
-
-	flag.Parse()
 
 	node, err := newTendermint(app, configFile)
 	if err != nil {

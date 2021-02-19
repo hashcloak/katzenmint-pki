@@ -95,7 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-	app := NewKVStoreApplication(db)
+	app := NewKatzenmintApplication(db)
 
 	node, err := newTendermint(app, configFile)
 	if err != nil {

@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+
+	// "github.com/ugorji/go/codec"
 	"github.com/dgraph-io/badger"
-	//pki "github.com/katzenpost/core/pki"
+	pki "github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -13,7 +16,26 @@ type KatzenmintApplication struct {
 	currentBatch *badger.Txn
 }
 
-var _ abcitypes.Application = (*KatzenmintApplication)(nil)
+// TODO: find a better way to represent the transaction
+type transaction struct {
+	Version string
+	Command Command
+	Payload string
+}
+
+var (
+	_ abcitypes.Application = (*KatzenmintApplication)(nil)
+	// jsonHandle *codec.JsonHandle
+)
+
+// TODO: check codec json handle
+// dec := codec.NewDecoderBytes(rawTx, jsonHandle)
+// func init() {
+// 	jsonHandle = new(codec.JsonHandle)
+// 	jsonHandle.Canonical = true
+// 	jsonHandle.IntegerAsString = 'A'
+// 	jsonHandle.MapKeyAsString = true
+// }
 
 func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
 	return &KatzenmintApplication{
@@ -29,34 +51,30 @@ func (KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abcitypes
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *KatzenmintApplication) isValid(tx []byte) (code uint32) {
-	// check format
-	parts := bytes.Split(tx, []byte("="))
-	if len(parts) != 2 {
+func (app *KatzenmintApplication) isValid(rawTx []byte) (code uint32) {
+	tx := new(transaction)
+	if err := json.Unmarshal(rawTx, tx); err != nil {
 		return 1
 	}
-
-	key, value := parts[0], parts[1]
-
-	// check if the same key=value already exists
-	err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
+	switch tx.Command {
+	case PublishMixDescriptor:
+		mixDescriptor := new(pki.MixDescriptor)
+		if err := json.Unmarshal([]byte(tx.Payload), mixDescriptor); err != nil {
+			code = 2
+		} else {
+			fmt.Println("")
+			fmt.Printf("%+v\n", mixDescriptor)
+			fmt.Println("")
 		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				if bytes.Equal(val, value) {
-					code = 2
-				}
-				return nil
-			})
-		}
-		return nil
-	})
-	if err != nil {
-		panic(err)
+	case AddConsensusDocument:
+		code = 2
+	case AddNewAuthority:
+		code = 2
+	default:
+		code = 2
 	}
+
+	code = 2
 
 	return code
 }

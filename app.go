@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
 	// "github.com/ugorji/go/codec"
 	"github.com/dgraph-io/badger"
-	pki "github.com/katzenpost/core/pki"
+	// "github.com/hashcloak/pki/internal/s11n"
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -51,21 +51,15 @@ func (KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abcitypes
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *KatzenmintApplication) isValid(rawTx []byte) (code uint32) {
-	tx := new(transaction)
+func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *transaction) {
+	tx = new(transaction)
 	if err := json.Unmarshal(rawTx, tx); err != nil {
-		return 1
+		code = 1
+		return
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		mixDescriptor := new(pki.MixDescriptor)
-		if err := json.Unmarshal([]byte(tx.Payload), mixDescriptor); err != nil {
-			code = 2
-		} else {
-			fmt.Println("")
-			fmt.Printf("%+v\n", mixDescriptor)
-			fmt.Println("")
-		}
+		code = 0
 	case AddConsensusDocument:
 		code = 2
 	case AddNewAuthority:
@@ -74,27 +68,52 @@ func (app *KatzenmintApplication) isValid(rawTx []byte) (code uint32) {
 		code = 2
 	}
 
-	code = 2
+	return
+}
 
-	return code
+func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
+	switch tx.Command {
+	case PublishMixDescriptor:
+		mixDescriptor := new(pki.MixDescriptor)
+		if err = json.Unmarshal([]byte(tx.Payload), mixDescriptor); err != nil {
+			return
+		} else {
+			// TODO: verify descriptor by epoch
+			fmt.Println("")
+			fmt.Printf("%+v\n", mixDescriptor)
+			fmt.Println("")
+		}
+	case AddConsensusDocument:
+		err = fmt.Errorf("transaction type not support yet")
+	case AddNewAuthority:
+		err = fmt.Errorf("transaction type not support yet")
+	default:
+		err = fmt.Errorf("transaction type not support yet")
+	}
+	return
 }
 
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	code := app.isValid(req.Tx)
+	code, tx := app.isTxValid(req.Tx)
 	if code != 0 {
 		return abcitypes.ResponseDeliverTx{Code: code}
 	}
-	parts := bytes.Split(req.Tx, []byte("="))
-	key, value := parts[0], parts[1]
-	err := app.currentBatch.Set(key, value)
+	err := app.executeTx(tx)
 	if err != nil {
-		panic(err)
+		code = 2
 	}
-	return abcitypes.ResponseDeliverTx{Code: 0}
+	// parts := bytes.Split(req.Tx, []byte("="))
+	// key, value := parts[0], parts[1]
+	// err := app.currentBatch.Set(key, value)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	return abcitypes.ResponseDeliverTx{Code: code}
 }
 
+// TODO: gas formula
 func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	code := app.isValid(req.Tx)
+	code, _ := app.isTxValid(req.Tx)
 	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 

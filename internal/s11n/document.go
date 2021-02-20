@@ -123,8 +123,7 @@ func MultiSignDocument(signer cert.Signer, peerSignatures []*cert.Signature, ver
 
 	// attach peer signatures
 	for _, signature := range peerSignatures {
-		s := string(signature.Identity)
-		verifier := verifiers[s]
+		verifier := verifiers[string(signature.Identity)]
 		signed, err = cert.AddSignature(verifier, *signature, signed)
 		if err != nil {
 			return nil, err

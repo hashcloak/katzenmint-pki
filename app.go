@@ -118,7 +118,7 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 }
 
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	app.currentBatch.Commit()
+	_ = app.currentBatch.Commit()
 	return abcitypes.ResponseCommit{Data: []byte{}}
 }
 

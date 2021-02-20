@@ -94,6 +94,9 @@ func GetVerifierFromDescriptor(rawDesc []byte) (cert.Verifier, error) {
 // MixDescriptor.
 func VerifyAndParseDescriptor(verifier cert.Verifier, b []byte, epoch uint64) (*pki.MixDescriptor, error) {
 	signatures, err := cert.GetSignatures(b)
+	if err != nil {
+		return nil, err
+	}
 	if len(signatures) != 1 {
 		return nil, fmt.Errorf("Expected 1 signature, got: %v", len(signatures))
 	}

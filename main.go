@@ -103,9 +103,12 @@ func main() {
 		os.Exit(2)
 	}
 
-	node.Start()
+	if err = node.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(2)
+	}
 	defer func() {
-		node.Stop()
+		_ = node.Stop()
 		node.Wait()
 	}()
 

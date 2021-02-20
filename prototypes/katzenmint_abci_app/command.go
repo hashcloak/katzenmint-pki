@@ -1,6 +1,6 @@
 package main
 
-type Command int
+type Command uint8
 
 var (
 	PublishMixDescriptor Command = 1

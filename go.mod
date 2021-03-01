@@ -16,6 +16,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tendermint v0.34.6
 	github.com/ugorji/go/codec v1.1.7
+	go.etcd.io/bbolt v1.3.5
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4 // indirect
 	golang.org/x/text v0.3.4 // indirect

@@ -18,3 +18,10 @@ func DecodeHex(src string) (out []byte) {
 	out, _ = hex.DecodeString(src)
 	return
 }
+
+// EncodeHex return encoded hex string of the given
+// bytes
+func EncodeHex(src []byte) (out string) {
+	out = hex.EncodeToString(src)
+	return
+}

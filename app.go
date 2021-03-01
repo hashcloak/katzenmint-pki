@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 
@@ -13,31 +15,6 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
-type KatzenmintApplication struct {
-	db                  *badger.DB
-	currentBatch        *badger.Txn
-	authorizedMixes     map[PublicKeyByte]bool
-	authorizedProviders map[PublicKeyByte]string
-}
-
-// TODO: find a better way to represent the transaction
-type transaction struct {
-	// version
-	Version string
-
-	// command
-	Command Command
-
-	// hex encoded ed25519 public key (should not be 0x prefxied)
-	PublicKey string
-
-	// hex encoded ed25519 signature (should not be 0x prefixed)
-	Signature string
-
-	// payload (mix descriptor/pki document/authority)
-	Payload string
-}
-
 const (
 	descriptorsBucket = "k_decsriptors"
 )
@@ -46,6 +23,14 @@ var (
 	_ abcitypes.Application = (*KatzenmintApplication)(nil)
 	// jsonHandle *codec.JsonHandle
 )
+
+type KatzenmintApplication struct {
+	state               *KatzenmintState
+	db                  *badger.DB
+	currentBatch        *badger.Txn
+	authorizedMixes     map[PublicKeyByte]bool
+	authorizedProviders map[PublicKeyByte]string
+}
 
 // TODO: check codec json handle
 // dec := codec.NewDecoderBytes(rawTx, jsonHandle)
@@ -57,8 +42,9 @@ var (
 // }
 
 func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
+	state := NewKatzenmintState(db)
 	return &KatzenmintApplication{
-		db: db,
+		state: state,
 	}
 }
 
@@ -76,35 +62,28 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 		code = 1
 		return
 	}
+	if len(tx.PublicKey) != ed25519.PublicKeySize*2 {
+		code = 2
+		return
+	}
+	if len(tx.Signature) != ed25519.SignatureSize*2 {
+		code = 3
+		return
+	}
+	if !tx.IsVerified() {
+		code = 4
+		return
+	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		code = 0
 	case AddConsensusDocument:
-		code = 2
 	case AddNewAuthority:
-		code = 2
+		code = 0
 	default:
-		code = 2
+		code = 5
 	}
 
 	return
-}
-
-func (app *KatzenmintApplication) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
-	pk := desc.IdentityKey.ByteArray()
-
-	switch desc.Layer {
-	case 0:
-		return app.authorizedMixes[pk]
-	case pki.LayerProvider:
-		name, ok := app.authorizedProviders[pk]
-		if !ok {
-			return false
-		}
-		return name == desc.Name
-	default:
-		return false
-	}
 }
 
 func (app *KatzenmintApplication) updateMixDescriptor(desc *pki.MixDescriptor) (err error) {
@@ -131,7 +110,7 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 			return
 		}
 		// make sure the descriptor is from authorized peerr
-		if !app.isDescriptorAuthorized(desc) {
+		if !app.state.isDescriptorAuthorized(desc) {
 			return
 		}
 		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)

@@ -16,16 +16,31 @@ import (
 type KatzenmintApplication struct {
 	db                  *badger.DB
 	currentBatch        *badger.Txn
-	authorizedMixes     map[Hash]bool
-	authorizedProviders map[Hash]string
+	authorizedMixes     map[PublicKeyByte]bool
+	authorizedProviders map[PublicKeyByte]string
 }
 
 // TODO: find a better way to represent the transaction
 type transaction struct {
+	// version
 	Version string
+
+	// command
 	Command Command
+
+	// hex encoded ed25519 public key (should not be 0x prefxied)
+	PublicKey string
+
+	// hex encoded ed25519 signature (should not be 0x prefixed)
+	Signature string
+
+	// payload (mix descriptor/pki document/authority)
 	Payload string
 }
+
+const (
+	descriptorsBucket = "k_decsriptors"
+)
 
 var (
 	_ abcitypes.Application = (*KatzenmintApplication)(nil)
@@ -92,6 +107,10 @@ func (app *KatzenmintApplication) isDescriptorAuthorized(desc *pki.MixDescriptor
 	}
 }
 
+func (app *KatzenmintApplication) updateMixDescriptor(desc *pki.MixDescriptor) (err error) {
+	return
+}
+
 func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 	switch tx.Command {
 	case PublishMixDescriptor:
@@ -106,17 +125,21 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		if err != nil {
 			return
 		}
-		// ensured the descriptor is signed by the peer?
+		// ensured the descriptor is signed by the user
 		var pubKey *eddsa.PublicKey
 		if !desc.IdentityKey.Equal(pubKey) {
 			return
 		}
-		// make sure the descriptor is from authorized peer
+		// make sure the descriptor is from authorized peerr
 		if !app.isDescriptorAuthorized(desc) {
 			return
 		}
 		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
 		// TODO: update mixes descriptor in storage (database)
+		err = app.updateMixDescriptor(desc)
+		if err != nil {
+			return
+		}
 	case AddConsensusDocument:
 		err = fmt.Errorf("transaction type not support yet")
 	case AddNewAuthority:

@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/dgraph-io/badger v1.6.1
+	github.com/golangci/golangci-lint v1.37.0 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/hashcloak/katzenmint-pki v0.0.0-20200825134709-8604e7226b71
 	// github.com/hashcloak/katzenmint-pki v0.0.0-20200825134709-8604e7226b71

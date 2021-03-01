@@ -6,14 +6,18 @@ import (
 
 	// "github.com/ugorji/go/codec"
 	"github.com/dgraph-io/badger"
-	// "github.com/hashcloak/pki/internal/s11n"
+	"github.com/hashcloak/katzenmint-pki/s11n"
+	"github.com/katzenpost/core/crypto/cert"
+	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type KatzenmintApplication struct {
-	db           *badger.DB
-	currentBatch *badger.Txn
+	db                  *badger.DB
+	currentBatch        *badger.Txn
+	authorizedMixes     map[Hash]bool
+	authorizedProviders map[Hash]string
 }
 
 // TODO: find a better way to represent the transaction
@@ -71,18 +75,48 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	return
 }
 
+func (app *KatzenmintApplication) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
+	pk := desc.IdentityKey.ByteArray()
+
+	switch desc.Layer {
+	case 0:
+		return app.authorizedMixes[pk]
+	case pki.LayerProvider:
+		name, ok := app.authorizedProviders[pk]
+		if !ok {
+			return false
+		}
+		return name == desc.Name
+	default:
+		return false
+	}
+}
+
 func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 	switch tx.Command {
 	case PublishMixDescriptor:
-		mixDescriptor := new(pki.MixDescriptor)
-		if err = json.Unmarshal([]byte(tx.Payload), mixDescriptor); err != nil {
+		var verifier cert.Verifier
+		verifier, err = s11n.GetVerifierFromDescriptor([]byte(tx.Payload))
+		if err != nil {
 			return
-		} else {
-			// TODO: verify descriptor by epoch
-			fmt.Println("")
-			fmt.Printf("%+v\n", mixDescriptor)
-			fmt.Println("")
 		}
+		// TODO: checkout epoch
+		var desc *pki.MixDescriptor
+		desc, err = s11n.VerifyAndParseDescriptor(verifier, []byte(tx.Payload), 0)
+		if err != nil {
+			return
+		}
+		// ensured the descriptor is signed by the peer?
+		var pubKey *eddsa.PublicKey
+		if !desc.IdentityKey.Equal(pubKey) {
+			return
+		}
+		// make sure the descriptor is from authorized peer
+		if !app.isDescriptorAuthorized(desc) {
+			return
+		}
+		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
+		// TODO: update mixes descriptor in storage (database)
 	case AddConsensusDocument:
 		err = fmt.Errorf("transaction type not support yet")
 	case AddNewAuthority:

@@ -24,6 +24,7 @@ var (
 	// jsonHandle *codec.JsonHandle
 )
 
+// TODO: when to discard db transaction
 type KatzenmintApplication struct {
 	state               *KatzenmintState
 	currentBatch        *badger.Txn
@@ -163,25 +164,21 @@ func (app *KatzenmintApplication) Query(query abcitypes.RequestQuery) (resQuery 
 
 	resQuery.Key = query.Data
 
-	// if err := app.currentBatch.View(func(txn *badger.Txn) error {
-	// 	item, err := txn.Get(resQuery.Key)
-	// 	fmt.Printf("Item: %+v\n", item)
-	// 	if err != nil && err != badger.ErrKeyNotFound {
-	// 		return nil
-	// 	}
-	// 	if err == badger.ErrKeyNotFound {
-	// 		resQuery.Log = "does not exist"
-	// 	} else {
-	// 		return item.Value(func(val []byte) error {
-	// 			resQuery.Log = "exists"
-	// 			resQuery.Value = val
-	// 			return nil
-	// 		})
-	// 	}
-	// 	return nil
-	// }); err != nil {
-	// 	panic(err)
-	// }
+	item, err := app.currentBatch.Get(resQuery.Key)
+	fmt.Printf("Item: %+v\n", item)
+	if err != nil {
+		if err == badger.ErrKeyNotFound {
+			resQuery.Log = "does not exist"
+		} else {
+			panic(err)
+		}
+	} else {
+		item.Value(func(val []byte) error {
+			resQuery.Log = "exists"
+			resQuery.Value = val
+			return nil
+		})
+	}
 	return
 }
 
@@ -207,7 +204,7 @@ func (KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes
 }
 
 func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.state.NewTransaction(false)
+	app.currentBatch = app.state.NewTransaction(true)
 	return abcitypes.ResponseBeginBlock{}
 }
 

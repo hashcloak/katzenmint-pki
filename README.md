@@ -8,6 +8,12 @@ A BFT PKI for the Katzenpost Authority PKI System using Tendermint
 ## Develop
 
 1. [Install tendermint v0.34.6](https://docs.tendermint.com/master/introduction/install.html)
+```BASH
+$ git clone https://github.com/tendermint/tendermint.git
+$ cd tendermint
+$ git checkout v0.34.6
+$ make install
+```
 2. `TMHOME=`pwd`/chain tendermint init`
 3. `go build`
 4. `./katzenmint_abci_app -config ./chain/config/config.toml`

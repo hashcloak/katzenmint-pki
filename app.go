@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
+	// "crypto/sha256"
 	"encoding/json"
 	"fmt"
 
@@ -26,7 +26,6 @@ var (
 
 type KatzenmintApplication struct {
 	state               *KatzenmintState
-	db                  *badger.DB
 	currentBatch        *badger.Txn
 	authorizedMixes     map[PublicKeyByte]bool
 	authorizedProviders map[PublicKeyByte]string
@@ -138,12 +137,13 @@ func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abci
 	if err != nil {
 		code = 2
 	}
-	// parts := bytes.Split(req.Tx, []byte("="))
-	// key, value := parts[0], parts[1]
-	// err := app.currentBatch.Set(key, value)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	key := fmt.Sprintf("%s.%s", descriptorsBucket, tx.PublicKey)
+	val := tx.Payload
+	// TODO: use raw byte in struct
+	err = app.currentBatch.Set([]byte(key), []byte(val))
+	if err != nil {
+		panic(err)
+	}
 	return abcitypes.ResponseDeliverTx{Code: code}
 }
 
@@ -163,25 +163,25 @@ func (app *KatzenmintApplication) Query(query abcitypes.RequestQuery) (resQuery 
 
 	resQuery.Key = query.Data
 
-	if err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(resQuery.Key)
-		fmt.Printf("Item: %+v\n", item)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return nil
-		}
-		if err == badger.ErrKeyNotFound {
-			resQuery.Log = "does not exist"
-		} else {
-			return item.Value(func(val []byte) error {
-				resQuery.Log = "exists"
-				resQuery.Value = val
-				return nil
-			})
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
+	// if err := app.currentBatch.View(func(txn *badger.Txn) error {
+	// 	item, err := txn.Get(resQuery.Key)
+	// 	fmt.Printf("Item: %+v\n", item)
+	// 	if err != nil && err != badger.ErrKeyNotFound {
+	// 		return nil
+	// 	}
+	// 	if err == badger.ErrKeyNotFound {
+	// 		resQuery.Log = "does not exist"
+	// 	} else {
+	// 		return item.Value(func(val []byte) error {
+	// 			resQuery.Log = "exists"
+	// 			resQuery.Value = val
+	// 			return nil
+	// 		})
+	// 	}
+	// 	return nil
+	// }); err != nil {
+	// 	panic(err)
+	// }
 	return
 }
 
@@ -207,7 +207,7 @@ func (KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes
 }
 
 func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.db.NewTransaction(true)
+	app.currentBatch = app.state.NewTransaction(false)
 	return abcitypes.ResponseBeginBlock{}
 }
 

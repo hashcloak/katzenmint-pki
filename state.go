@@ -55,3 +55,8 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 		return false
 	}
 }
+
+// NewTransaction
+func (state *KatzenmintState) NewTransaction(readOnly bool) *badger.Txn {
+	return state.db.NewTransaction(readOnly)
+}

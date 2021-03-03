@@ -7,7 +7,10 @@ import (
 	"fmt"
 
 	// "github.com/ugorji/go/codec"
-	"github.com/dgraph-io/badger"
+	// "github.com/dgraph-io/badger"
+	badger "github.com/ipfs/go-ds-badger"
+	ds "github.com/ipfs/go-datastore"
+	dsq "github.com/ipfs/go-datastore/query"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
@@ -26,8 +29,11 @@ var (
 
 type KatzenmintApplication struct {
 	state               *KatzenmintState
-	db                  *badger.DB
-	currentBatch        *badger.Txn
+	db                  *ds.Datastore
+	// readonly tx
+	// tx        			*ds.Txn
+	// batch write
+	batch        		*ds.Batch
 	authorizedMixes     map[PublicKeyByte]bool
 	authorizedProviders map[PublicKeyByte]string
 }
@@ -41,7 +47,7 @@ type KatzenmintApplication struct {
 // 	jsonHandle.MapKeyAsString = true
 // }
 
-func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
+func NewKatzenmintApplication(db *ds.Datastore) *KatzenmintApplication {
 	state := NewKatzenmintState(db)
 	return &KatzenmintApplication{
 		state: state,
@@ -140,7 +146,7 @@ func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abci
 	}
 	// parts := bytes.Split(req.Tx, []byte("="))
 	// key, value := parts[0], parts[1]
-	// err := app.currentBatch.Set(key, value)
+	// err := app.batch.Set(key, value)
 	// if err != nil {
 	// 	panic(err)
 	// }
@@ -154,7 +160,8 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 }
 
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	_ = app.currentBatch.Commit()
+	// _ = app.tx.Commit()
+	_ = app.batch.Commit()
 	return abcitypes.ResponseCommit{Data: []byte{}}
 }
 
@@ -163,22 +170,29 @@ func (app *KatzenmintApplication) Query(query abcitypes.RequestQuery) (resQuery 
 
 	resQuery.Key = query.Data
 
-	if err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(resQuery.Key)
-		fmt.Printf("Item: %+v\n", item)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return nil
-		}
-		if err == badger.ErrKeyNotFound {
-			resQuery.Log = "does not exist"
-		} else {
-			return item.Value(func(val []byte) error {
-				resQuery.Log = "exists"
-				resQuery.Value = val
-				return nil
-			})
-		}
-		return nil
+	res, err := app.db.Query(dsq.Query{Prefix: resQuery.Key})
+
+	if 
+	actual, err := actualR.Rest()
+	if err != nil {
+		t.Error(err)
+	}
+	// func(txn *badger.Txn) error {
+	// 	item, err := txn.Get()
+	// 	fmt.Printf("Item: %+v\n", item)
+	// 	if err != nil && err != badger.ErrKeyNotFound {
+	// 		return nil
+	// 	}
+	// 	if err == badger.ErrKeyNotFound {
+	// 		resQuery.Log = "does not exist"
+	// 	} else {
+	// 		return item.Value(func(val []byte) error {
+	// 			resQuery.Log = "exists"
+	// 			resQuery.Value = val
+	// 			return nil
+	// 		})
+	// 	}
+		// return nil
 	}); err != nil {
 		panic(err)
 	}
@@ -207,7 +221,9 @@ func (KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes
 }
 
 func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.db.NewTransaction(true)
+	// set readonly tx
+	// app.tx = app.db.NewTransaction(true)
+	app.batch, _ = app.db.Batch()
 	return abcitypes.ResponseBeginBlock{}
 }
 

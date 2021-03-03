@@ -3,7 +3,8 @@ package main
 import (
 	"sync"
 
-	"github.com/dgraph-io/badger"
+	// "github.com/dgraph-io/badger"
+	ds "github.com/ipfs/go-datastore"
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
@@ -21,7 +22,7 @@ type document struct {
 
 type KatzenmintState struct {
 	sync.RWMutex
-	db *badger.DB
+	db *ds.Datastore
 
 	authorizedMixes       map[[eddsa.PublicKeySize]byte]bool
 	authorizedProviders   map[[eddsa.PublicKeySize]byte]string
@@ -33,7 +34,7 @@ type KatzenmintState struct {
 	votes       map[uint64]map[[eddsa.PublicKeySize]byte]*document
 }
 
-func NewKatzenmintState(db *badger.DB) *KatzenmintState {
+func NewKatzenmintState(db *ds.Datastore) *KatzenmintState {
 	return &KatzenmintState{
 		db: db,
 	}

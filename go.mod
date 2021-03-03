@@ -3,10 +3,12 @@ module githu.com/hashcloak/katzenmint-pki
 go 1.15
 
 require (
-	github.com/dgraph-io/badger v1.6.1
+	github.com/dgraph-io/badger v1.6.2
 	github.com/golangci/golangci-lint v1.37.0 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/hashcloak/katzenmint-pki v0.0.0-20200825134709-8604e7226b71
+	github.com/ipfs/go-datastore v0.4.5
+	github.com/ipfs/go-ds-badger v0.2.6
 	// github.com/hashcloak/katzenmint-pki v0.0.0-20200825134709-8604e7226b71
 	github.com/katzenpost/core v0.0.11
 	github.com/kr/text v0.2.0 // indirect

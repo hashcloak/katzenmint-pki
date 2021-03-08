@@ -16,7 +16,13 @@ import (
 )
 
 const (
-	descriptorsBucket = "k_decsriptors"
+	descriptorsBucket     = "k_decsriptors"
+	documentsBucket       = "k_documents"
+	stateAcceptDescriptor = "accept_desc"
+	stateAcceptVote       = "accept_vote"
+	stateAcceptReveal     = "accept_reveal"
+	stateAcceptSignature  = "accept_signature"
+	stateBootstrap        = "bootstrap"
 )
 
 var (
@@ -86,10 +92,6 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	return
 }
 
-func (app *KatzenmintApplication) updateMixDescriptor(desc *pki.MixDescriptor) (err error) {
-	return
-}
-
 func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 	switch tx.Command {
 	case PublishMixDescriptor:
@@ -100,7 +102,8 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		}
 		// TODO: checkout epoch
 		var desc *pki.MixDescriptor
-		desc, err = s11n.VerifyAndParseDescriptor(verifier, []byte(tx.Payload), 0)
+		payload := []byte(tx.Payload)
+		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
 		if err != nil {
 			return
 		}
@@ -115,7 +118,7 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		}
 		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
 		// TODO: update mixes descriptor in storage (database)
-		err = app.updateMixDescriptor(desc)
+		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
 			return
 		}
@@ -171,20 +174,12 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 	}
 	switch kquery.Command {
 	case GetConsensus:
-		item, err := app.currentBatch.Get([]byte(kquery.Payload))
-		fmt.Printf("Item: %+v\n", item)
+		doc, err := app.state.documentForEpoch(kquery.Epoch)
 		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				resQuery.Log = "does not exist"
-			} else {
-				panic(err)
-			}
+			fmt.Printf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err)
+			resQuery.Log = "does not exist"
 		} else {
-			item.Value(func(val []byte) error {
-				resQuery.Log = "exists"
-				resQuery.Value = val
-				return nil
-			})
+			resQuery.Value = doc
 		}
 	default:
 		resQuery.Log = "unsupported query"

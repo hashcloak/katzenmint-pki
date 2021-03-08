@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/katzenpost/core/crypto/rand"
@@ -27,6 +28,7 @@ func TestTransaction(t *testing.T) {
 	}
 	tx := new(transaction)
 	tx.Version = "1.0"
+	tx.Epoch = 10
 	tx.Command = 1
 	tx.Payload = string(payload)
 	tx.PublicKey = EncodeHex(pubKey[:])
@@ -36,4 +38,6 @@ func TestTransaction(t *testing.T) {
 	if !tx.IsVerified() {
 		t.Fatalf("transaction is not verified: %+v\n", tx)
 	}
+	z, _ := json.Marshal(tx)
+	fmt.Println(string(z))
 }

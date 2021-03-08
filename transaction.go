@@ -11,6 +11,9 @@ type signTransaction struct {
 	// version
 	Version string
 
+	// Epoch
+	Epoch uint64
+
 	// command
 	Command Command
 
@@ -26,6 +29,9 @@ type signTransaction struct {
 type transaction struct {
 	// version
 	Version string
+
+	// Epoch
+	Epoch uint64
 
 	// command
 	Command Command
@@ -44,6 +50,7 @@ type transaction struct {
 func (tx *transaction) SerializeHash() (hash [32]byte) {
 	signTx := new(signTransaction)
 	signTx.Version = tx.Version
+	signTx.Epoch = tx.Epoch
 	signTx.Command = tx.Command
 	signTx.PublicKey = tx.PublicKey
 	signTx.Payload = tx.Payload

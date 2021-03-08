@@ -160,24 +160,36 @@ func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 }
 
 // Note, no proof is included here
-func (app *KatzenmintApplication) Query(query abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
+// TODO: include merkle proof?
+func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 
-	resQuery.Key = query.Data
-
-	item, err := app.currentBatch.Get(resQuery.Key)
-	fmt.Printf("Item: %+v\n", item)
-	if err != nil {
-		if err == badger.ErrKeyNotFound {
-			resQuery.Log = "does not exist"
+	kquery := new(query)
+	if err := json.Unmarshal(rquery.Data, kquery); err != nil {
+		resQuery.Log = "unsupported query"
+		// resQuery.value = "unsupported query"
+		return
+	}
+	switch kquery.Command {
+	case GetConsensus:
+		item, err := app.currentBatch.Get([]byte(kquery.Payload))
+		fmt.Printf("Item: %+v\n", item)
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				resQuery.Log = "does not exist"
+			} else {
+				panic(err)
+			}
 		} else {
-			panic(err)
+			item.Value(func(val []byte) error {
+				resQuery.Log = "exists"
+				resQuery.Value = val
+				return nil
+			})
 		}
-	} else {
-		item.Value(func(val []byte) error {
-			resQuery.Log = "exists"
-			resQuery.Value = val
-			return nil
-		})
+	default:
+		resQuery.Log = "unsupported query"
+		// resQuery.value = "unsupported query"
+		return
 	}
 	return
 }

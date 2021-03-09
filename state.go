@@ -60,6 +60,13 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 	}
 }
 
+func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
+	if _, ok := state.documents[doc.Epoch]; ok {
+		return false
+	}
+	return false
+}
+
 // NewTransaction
 func (state *KatzenmintState) NewTransaction(update bool) *badger.Txn {
 	return state.db.NewTransaction(update)
@@ -129,6 +136,46 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	id := hex.EncodeToString(desc.IdentityKey.Bytes())
 	fmt.Printf("Node %s: Successfully submitted descriptor for epoch %v.", id, epoch)
 	// s.onUpdate()
+	return
+}
+
+func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, epoch uint64) (err error) {
+	state.Lock()
+	defer state.Unlock()
+
+	// Note: Caller ensures that the epoch is the current epoch +- 1.
+	// pk := doc.IdentityKey.ByteArray()
+
+	// Get the public key -> document map for the epoch.
+	m, ok := state.documents[epoch]
+	if !ok {
+		if !bytes.Equal(m.raw, rawDoc) {
+			return fmt.Errorf("state: Conflicting document for epoch %v", epoch)
+		}
+
+		// Redundant uploads that don't change are harmless.
+		return nil
+	}
+
+	e := new(big.Int)
+	e.SetUint64(epoch)
+
+	// Persist the raw descriptor to disk.
+	tx := state.NewTransaction(true)
+	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
+	if err := tx.Set([]byte(key), rawDoc); err != nil {
+		// Persistence failures are FATAL.
+		// s.s.fatalErrCh <- err
+	}
+	_ = tx.Commit()
+
+	// Store the raw descriptor and the parsed struct.
+	d := new(document)
+	d.doc = doc
+	d.raw = rawDoc
+	state.documents[epoch] = d
+
+	fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
 	return
 }
 

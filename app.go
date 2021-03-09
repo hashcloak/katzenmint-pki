@@ -117,13 +117,33 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 			return
 		}
 		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
-		// TODO: update mixes descriptor in storage (database)
 		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
 			return
 		}
 	case AddConsensusDocument:
-		err = fmt.Errorf("transaction type not support yet")
+		var verifier cert.Verifier
+		payload := []byte(tx.Payload)
+		var doc *pki.Document
+		doc, err = s11n.VerifyAndParseDocument(payload, verifier)
+		if err != nil {
+			return
+		} else if doc.Epoch != tx.Epoch {
+			err = s11n.ErrInvalidEpoch
+			return
+		}
+		if err = s11n.IsDocumentWellFormed(doc); err != nil {
+			return
+		}
+		// double checked
+		// if !app.state.isDocumentAuthorized(doc) {
+		// 	return
+		// }
+		fmt.Printf("got document: %+v\n, should update the document!!\n", doc)
+		err = app.state.updateDocument(payload, doc, tx.Epoch)
+		if err != nil {
+			return
+		}
 	case AddNewAuthority:
 		err = fmt.Errorf("transaction type not support yet")
 	default:

@@ -16,13 +16,8 @@ import (
 )
 
 const (
-	descriptorsBucket     = "k_decsriptors"
-	documentsBucket       = "k_documents"
-	stateAcceptDescriptor = "accept_desc"
-	stateAcceptVote       = "accept_vote"
-	stateAcceptReveal     = "accept_reveal"
-	stateAcceptSignature  = "accept_signature"
-	stateBootstrap        = "bootstrap"
+	descriptorsBucket = "k_decsriptors"
+	documentsBucket   = "k_documents"
 )
 
 var (
@@ -32,10 +27,8 @@ var (
 
 // TODO: when to discard db transaction
 type KatzenmintApplication struct {
-	state               *KatzenmintState
-	currentBatch        *badger.Txn
-	authorizedMixes     map[PublicKeyByte]bool
-	authorizedProviders map[PublicKeyByte]string
+	state        *KatzenmintState
+	currentBatch *badger.Txn
 }
 
 // TODO: check codec json handle
@@ -84,9 +77,14 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	case PublishMixDescriptor:
 	case AddConsensusDocument:
 	case AddNewAuthority:
+		if !app.state.isAuthorized(tx.PublicKeyBytes()) {
+			fmt.Println("Non authorized authority")
+			code = 5
+			return
+		}
 		code = 0
 	default:
-		code = 5
+		code = 6
 	}
 
 	return
@@ -116,6 +114,9 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		if !app.state.isDescriptorAuthorized(desc) {
 			return
 		}
+		if err = s11n.IsDescriptorWellFormed(desc, tx.Epoch); err != nil {
+			return
+		}
 		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
 		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
@@ -135,17 +136,22 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		if err = s11n.IsDocumentWellFormed(doc); err != nil {
 			return
 		}
-		// double checked
-		// if !app.state.isDocumentAuthorized(doc) {
-		// 	return
-		// }
+		if !app.state.isDocumentAuthorized(doc) {
+			return
+		}
 		fmt.Printf("got document: %+v\n, should update the document!!\n", doc)
 		err = app.state.updateDocument(payload, doc, tx.Epoch)
 		if err != nil {
 			return
 		}
 	case AddNewAuthority:
-		err = fmt.Errorf("transaction type not support yet")
+		pk := tx.PublicKeyBytes()
+		payload := []byte(tx.Payload)
+		err = app.state.updateAuthority(payload, pk)
+		if err != nil {
+			fmt.Printf("failed to update authority: %+v\n", err)
+			return
+		}
 	default:
 		err = fmt.Errorf("transaction type not support yet")
 	}
@@ -226,6 +232,7 @@ func (app *KatzenmintApplication) ApplySnapshotChunk(req abcitypes.RequestApplyS
 	return
 }
 
+// TODO: load genesis authorities
 func (KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	return abcitypes.ResponseInitChain{}
 }

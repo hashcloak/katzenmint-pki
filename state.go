@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger"
-	"github.com/katzenpost/core/crypto/ecdh"
+	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 )
@@ -30,17 +30,26 @@ type KatzenmintState struct {
 	authorizedMixes       map[[eddsa.PublicKeySize]byte]bool
 	authorizedProviders   map[[eddsa.PublicKeySize]byte]string
 	authorizedAuthorities map[[eddsa.PublicKeySize]byte]bool
-	authorityLinkKeys     map[[eddsa.PublicKeySize]byte]*ecdh.PublicKey
+	// authorityLinkKeys     map[[eddsa.PublicKeySize]byte]*ecdh.PublicKey
 
 	documents   map[uint64]*document
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
-	votes       map[uint64]map[[eddsa.PublicKeySize]byte]*document
+	// votes       map[uint64]map[[eddsa.PublicKeySize]byte]*document
+
+	fatalErrCh chan error
 }
 
 func NewKatzenmintState(db *badger.DB) *KatzenmintState {
 	return &KatzenmintState{
 		db: db,
 	}
+}
+
+func (state *KatzenmintState) isAuthorized(pk [eddsa.PublicKeySize]byte) bool {
+	if isAuthority, ok := state.authorizedAuthorities[pk]; ok {
+		return isAuthority
+	}
+	return false
 }
 
 func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
@@ -123,7 +132,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
 	if err := tx.Set([]byte(key), rawDesc); err != nil {
 		// Persistence failures are FATAL.
-		// s.s.fatalErrCh <- err
+		state.fatalErrCh <- err
 	}
 	_ = tx.Commit()
 
@@ -165,7 +174,7 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
 	if err := tx.Set([]byte(key), rawDoc); err != nil {
 		// Persistence failures are FATAL.
-		// s.s.fatalErrCh <- err
+		state.fatalErrCh <- err
 	}
 	_ = tx.Commit()
 
@@ -176,6 +185,24 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	state.documents[epoch] = d
 
 	fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
+	return
+}
+
+func (state *KatzenmintState) updateAuthority(rawAuth []byte, pk [eddsa.PublicKeySize]byte) (err error) {
+	state.Lock()
+	defer state.Unlock()
+
+	// TODO: check self public key
+	authorized, ok := state.authorizedAuthorities[pk]
+	if !ok {
+		state.authorizedAuthorities[pk] = true
+		return
+	} else if !authorized {
+		state.authorizedAuthorities[pk] = true
+		return
+	}
+
+	fmt.Printf("Node: Successfully added authority %v.", pk)
 	return
 }
 

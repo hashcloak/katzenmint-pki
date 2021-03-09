@@ -4,6 +4,8 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+
+	"github.com/katzenpost/core/crypto/eddsa"
 )
 
 // signTransaction represents the transaction used to make transaction hash
@@ -71,5 +73,12 @@ func (tx *transaction) IsVerified() (isVerified bool) {
 	sig := DecodeHex(tx.Signature)
 	pubKey := ed25519.PublicKey(pub)
 	isVerified = ed25519.Verify(pubKey, msgHash[:], sig)
+	return
+}
+
+// PublicKeyBytes returns public key bytes of the given transaction
+func (tx *transaction) PublicKeyBytes() (pk [eddsa.PublicKeySize]byte) {
+	pubkey := DecodeHex(tx.PublicKey)
+	copy(pk[:], pubkey)
 	return
 }

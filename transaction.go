@@ -77,7 +77,13 @@ func (tx *transaction) IsVerified() (isVerified bool) {
 }
 
 // PublicKeyBytes returns public key bytes of the given transaction
-func (tx *transaction) PublicKeyBytes() (pk [eddsa.PublicKeySize]byte) {
+func (tx *transaction) PublicKeyBytes() (pk []byte) {
+	pk = DecodeHex(tx.PublicKey)
+	return
+}
+
+// PublicKeyBytesArray returns public key bytes of the given transaction
+func (tx *transaction) PublicKeyBytesArray() (pk [eddsa.PublicKeySize]byte) {
 	pubkey := DecodeHex(tx.PublicKey)
 	copy(pk[:], pubkey)
 	return

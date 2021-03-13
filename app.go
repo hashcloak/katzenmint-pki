@@ -6,39 +6,24 @@ import (
 	"encoding/json"
 	"fmt"
 
-	// "github.com/ugorji/go/codec"
 	"github.com/dgraph-io/badger"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-)
-
-const (
-	descriptorsBucket = "k_decsriptors"
-	documentsBucket   = "k_documents"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 )
 
 var (
 	_ abcitypes.Application = (*KatzenmintApplication)(nil)
-	// jsonHandle *codec.JsonHandle
 )
 
-// TODO: when to discard db transaction
 type KatzenmintApplication struct {
-	state        *KatzenmintState
-	currentBatch *badger.Txn
-}
+	state *KatzenmintState
 
-// TODO: check codec json handle
-// dec := codec.NewDecoderBytes(rawTx, jsonHandle)
-// func init() {
-// 	jsonHandle = new(codec.JsonHandle)
-// 	jsonHandle.Canonical = true
-// 	jsonHandle.IntegerAsString = 'A'
-// 	jsonHandle.MapKeyAsString = true
-// }
+	// logger log.Logger
+}
 
 func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
 	state := NewKatzenmintState(db)
@@ -47,11 +32,12 @@ func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
 	}
 }
 
-func (KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+	// return normal blockchain info
 	return abcitypes.ResponseInfo{}
 }
 
-func (KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
+func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
 	return abcitypes.ResponseSetOption{}
 }
 
@@ -77,7 +63,13 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	case PublishMixDescriptor:
 	case AddConsensusDocument:
 	case AddNewAuthority:
-		if !app.state.isAuthorized(tx.PublicKeyBytes()) {
+		v := abcitypes.UpdateValidator(tx.PublicKeyBytes(), 0, "")
+		pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
+		if err != nil {
+			code = 5
+			return
+		}
+		if !app.state.isAuthorized(string(pubkey.Address())) {
 			fmt.Println("Non authorized authority")
 			code = 5
 			return
@@ -145,9 +137,16 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 			return
 		}
 	case AddNewAuthority:
-		pk := tx.PublicKeyBytes()
+		// TODO: update validators
+		var authority *Authority
+		// pk := tx.PublicKeyBytesArray()
 		payload := []byte(tx.Payload)
-		err = app.state.updateAuthority(payload, pk)
+		authority, err = app.state.VerifyAndParseAuthority(payload)
+		if err != nil {
+			fmt.Printf("failed to parse authority: %+v\n", err)
+			return
+		}
+		err = app.state.updateAuthority(payload, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
 		if err != nil {
 			fmt.Printf("failed to update authority: %+v\n", err)
 			return
@@ -167,13 +166,6 @@ func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abci
 	if err != nil {
 		code = 2
 	}
-	key := fmt.Sprintf("%s.%s", descriptorsBucket, tx.PublicKey)
-	val := tx.Payload
-	// TODO: use raw byte in struct
-	err = app.currentBatch.Set([]byte(key), []byte(val))
-	if err != nil {
-		panic(err)
-	}
 	return abcitypes.ResponseDeliverTx{Code: code}
 }
 
@@ -183,8 +175,9 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
+// TODO: should update the validators map after commit
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	_ = app.currentBatch.Commit()
+	app.state.Commit()
 	return abcitypes.ResponseCommit{Data: []byte{}}
 }
 
@@ -215,12 +208,53 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 	return
 }
 
+func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+	app.state.BeginBlock()
+	for _, v := range req.Validators {
+		err := app.state.updateAuthority(nil, v)
+		if err != nil {
+			fmt.Println("Error updating validators")
+		}
+	}
+	app.state.Commit()
+	return abcitypes.ResponseInitChain{}
+}
+
+// Track the block hash and header information
+func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
+	app.state.BeginBlock()
+
+	// Punish validators who committed equivocation.
+	for _, ev := range req.ByzantineValidators {
+		if ev.Type == abcitypes.EvidenceType_DUPLICATE_VOTE {
+			addr := string(ev.Validator.Address)
+			if pubKey, ok := app.state.GetAuthorized(addr); ok {
+				_ = app.state.updateAuthority(nil, abcitypes.ValidatorUpdate{
+					PubKey: pubKey,
+					Power:  ev.Validator.Power - 1,
+				})
+				fmt.Println("Decreased val power by 1 because of the equivocation", addr)
+			} else {
+				fmt.Println("Wanted to punish val, but can't find it", addr)
+			}
+		}
+	}
+	return abcitypes.ResponseBeginBlock{}
+}
+
+// Update validators
+func (app *KatzenmintApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+	// will there be race condition?
+	return abcitypes.ResponseEndBlock{ValidatorUpdates: app.state.ValUpdates}
+}
+
 // TODO: state sync connection
 func (app *KatzenmintApplication) ListSnapshots(req abcitypes.RequestListSnapshots) (res abcitypes.ResponseListSnapshots) {
 	return
 }
 
 func (app *KatzenmintApplication) OfferSnapshot(req abcitypes.RequestOfferSnapshot) (res abcitypes.ResponseOfferSnapshot) {
+	res.Result = abcitypes.ResponseOfferSnapshot_ABORT
 	return
 }
 
@@ -229,19 +263,6 @@ func (app *KatzenmintApplication) LoadSnapshotChunk(req abcitypes.RequestLoadSna
 }
 
 func (app *KatzenmintApplication) ApplySnapshotChunk(req abcitypes.RequestApplySnapshotChunk) (res abcitypes.ResponseApplySnapshotChunk) {
+	res.Result = abcitypes.ResponseApplySnapshotChunk_ABORT
 	return
-}
-
-// TODO: load genesis authorities
-func (KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	return abcitypes.ResponseInitChain{}
-}
-
-func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.state.NewTransaction(true)
-	return abcitypes.ResponseBeginBlock{}
-}
-
-func (KatzenmintApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
-	return abcitypes.ResponseEndBlock{}
 }

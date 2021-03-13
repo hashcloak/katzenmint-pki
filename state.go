@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
@@ -11,6 +12,16 @@ import (
 	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	// "github.com/tendermint/tendermint/libs/log"
+	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
+)
+
+const (
+	descriptorsBucket = "k_descriptors"
+	documentsBucket   = "k_documents"
+	authoritiesBucket = "k_documents"
 )
 
 type descriptor struct {
@@ -25,31 +36,76 @@ type document struct {
 
 type KatzenmintState struct {
 	sync.RWMutex
+	blockHeight uint64
+
 	db *badger.DB
 
 	authorizedMixes       map[[eddsa.PublicKeySize]byte]bool
-	authorizedProviders   map[[eddsa.PublicKeySize]byte]string
 	authorizedAuthorities map[[eddsa.PublicKeySize]byte]bool
 	// authorityLinkKeys     map[[eddsa.PublicKeySize]byte]*ecdh.PublicKey
 
 	documents   map[uint64]*document
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
-	// votes       map[uint64]map[[eddsa.PublicKeySize]byte]*document
 
-	fatalErrCh chan error
+	// validator set
+	validators         map[[eddsa.PublicKeySize]byte]string
+	ValUpdates         []abcitypes.ValidatorUpdate
+	valAddrToPubKeyMap map[string]pc.PublicKey
+
+	// keep this for panic error?
+	// fatalErrCh chan error
+
+	// whether data was changed
+	dirty            bool
+	transactionBatch *badger.Txn
 }
 
 func NewKatzenmintState(db *badger.DB) *KatzenmintState {
+	// should load the current state from database
 	return &KatzenmintState{
-		db: db,
+		db:                    db,
+		authorizedMixes:       make(map[[eddsa.PublicKeySize]byte]bool),
+		authorizedAuthorities: make(map[[eddsa.PublicKeySize]byte]bool),
+		documents:             make(map[uint64]*document),
+		descriptors:           make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
+		validators:            make(map[[eddsa.PublicKeySize]byte]string),
+		ValUpdates:            make([]abcitypes.ValidatorUpdate, 1),
+		valAddrToPubKeyMap:    make(map[string]pc.PublicKey),
 	}
 }
 
-func (state *KatzenmintState) isAuthorized(pk [eddsa.PublicKeySize]byte) bool {
-	if isAuthority, ok := state.authorizedAuthorities[pk]; ok {
-		return isAuthority
+func (state *KatzenmintState) BeginBlock() {
+	state.Lock()
+	defer state.Unlock()
+	// whether the transaction was started
+	if state.transactionBatch == nil {
+		state.transactionBatch = state.NewTransaction(true)
+	}
+	state.ValUpdates = make([]abcitypes.ValidatorUpdate, 0)
+}
+
+// TODO: put the transactions into block
+func (state *KatzenmintState) Commit() {
+	state.Lock()
+	defer state.Unlock()
+	// whether the data was changed
+	if state.dirty {
+		_ = state.transactionBatch.Commit()
+		state.transactionBatch = nil
+	}
+	state.blockHeight++
+}
+
+func (state *KatzenmintState) isAuthorized(address string) bool {
+	if _, ok := state.valAddrToPubKeyMap[address]; ok {
+		return true
 	}
 	return false
+}
+
+func (state *KatzenmintState) GetAuthorized(address string) (pc.PublicKey, bool) {
+	pubkey, ok := state.valAddrToPubKeyMap[address]
+	return pubkey, ok
 }
 
 func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
@@ -59,11 +115,9 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 	case 0:
 		return state.authorizedMixes[pk]
 	case pki.LayerProvider:
-		name, ok := state.authorizedProviders[pk]
-		if !ok {
-			return false
-		}
-		return name == desc.Name
+		// check authorities
+		_, ok := state.validators[pk]
+		return ok
 	default:
 		return false
 	}
@@ -128,13 +182,13 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
-	tx := state.NewTransaction(true)
 	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
-	if err := tx.Set([]byte(key), rawDesc); err != nil {
+	if err := state.transactionBatch.Set([]byte(key), rawDesc); err != nil {
 		// Persistence failures are FATAL.
-		state.fatalErrCh <- err
+		// state.fatalErrCh <- err
+		return err
 	}
-	_ = tx.Commit()
+	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
 	d := new(descriptor)
@@ -170,13 +224,13 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	e.SetUint64(epoch)
 
 	// Persist the raw descriptor to disk.
-	tx := state.NewTransaction(true)
 	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
-	if err := tx.Set([]byte(key), rawDoc); err != nil {
+	if err := state.transactionBatch.Set([]byte(key), rawDoc); err != nil {
 		// Persistence failures are FATAL.
-		state.fatalErrCh <- err
+		// state.fatalErrCh <- err
+		return err
 	}
-	_ = tx.Commit()
+	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
 	d := new(document)
@@ -188,22 +242,65 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	return
 }
 
-func (state *KatzenmintState) updateAuthority(rawAuth []byte, pk [eddsa.PublicKeySize]byte) (err error) {
-	state.Lock()
-	defer state.Unlock()
+func (state *KatzenmintState) VerifyAndParseAuthority(payload []byte) (*Authority, error) {
+	// Parse the payload.
+	authority := new(Authority)
+	err := json.Unmarshal(payload, authority)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: check authority
+	return authority, nil
+}
 
-	// TODO: check self public key
-	authorized, ok := state.authorizedAuthorities[pk]
-	if !ok {
-		state.authorizedAuthorities[pk] = true
-		return
-	} else if !authorized {
-		state.authorizedAuthorities[pk] = true
-		return
+func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.ValidatorUpdate) error {
+	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
+	if err != nil {
+		return fmt.Errorf("can't decode public key: %w", err)
+	}
+	key := []byte("val:" + string(pubkey.Bytes()))
+
+	if v.Power == 0 {
+		// remove validator
+		auth, err := state.transactionBatch.Get(key)
+		if err != nil {
+			return err
+		}
+		if auth != nil {
+			return fmt.Errorf("Cannot remove non-existent validator %s", pubkey.Address())
+		}
+		if err = state.transactionBatch.Delete(key); err != nil {
+			return err
+		}
+		state.dirty = true
+		delete(state.valAddrToPubKeyMap, string(pubkey.Address()))
+	} else {
+		// add or update validator
+		value := bytes.NewBuffer(make([]byte, 0))
+		if err := abcitypes.WriteMessage(&v, value); err != nil {
+			return fmt.Errorf("error encoding validator: %v", err)
+		}
+		if err = state.transactionBatch.Set(key, value.Bytes()); err != nil {
+			// Persistence failures are FATAL.
+			// state.fatalErrCh <- err
+			return err
+		}
+		state.dirty = true
+		if rawAuth != nil {
+			// save payload into database
+			key := state.storageKey([]byte(authoritiesBucket), v.PubKey.String(), 0)
+			if err := state.transactionBatch.Set([]byte(key), rawAuth); err != nil {
+				// Persistence failures are FATAL.
+				// state.fatalErrCh <- err
+				return err
+			}
+		}
+		state.valAddrToPubKeyMap[string(pubkey.Address())] = v.PubKey
 	}
 
-	fmt.Printf("Node: Successfully added authority %v.", pk)
-	return
+	state.ValUpdates = append(state.ValUpdates, v)
+
+	return nil
 }
 
 func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, error) {

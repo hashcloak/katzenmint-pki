@@ -13,3 +13,8 @@ lint:
 .PHONY: test
 test: 
 	go test --race ./...
+
+
+.PHONY: setup
+setup:
+	sh setup.sh

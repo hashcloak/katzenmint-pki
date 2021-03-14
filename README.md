@@ -7,6 +7,10 @@ A BFT PKI for the Katzenpost Authority PKI System using Tendermint
 
 ## Develop
 
+There is `setup.sh` to help you out setting the develop environment, you can run `make setup` or `sh setup.sh` to start.
+
+Or you can follow these steps:
+
 1. [Install tendermint v0.34.6](https://docs.tendermint.com/master/introduction/install.html)
 ```BASH
 $ git clone https://github.com/tendermint/tendermint.git

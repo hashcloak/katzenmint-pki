@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 
 	"github.com/katzenpost/core/crypto/eddsa"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 )
 
+// TODO: cache the hex decode result?
 // signTransaction represents the transaction used to make transaction hash
 type signTransaction struct {
 	// version
@@ -20,6 +23,7 @@ type signTransaction struct {
 	Command Command
 
 	// hex encoded ed25519 public key (should not be 0x prefxied)
+	// TODO: is there better way to take PublicKey?
 	PublicKey string
 
 	// payload (mix descriptor/pki document/authority)
@@ -82,9 +86,19 @@ func (tx *transaction) PublicKeyBytes() (pk []byte) {
 	return
 }
 
-// PublicKeyBytesArray returns public key bytes of the given transaction
-func (tx *transaction) PublicKeyBytesArray() (pk [eddsa.PublicKeySize]byte) {
+// PublicKeyByteArray returns public key bytes of the given transaction
+func (tx *transaction) PublicKeyByteArray() (pk [eddsa.PublicKeySize]byte) {
 	pubkey := DecodeHex(tx.PublicKey)
 	copy(pk[:], pubkey)
 	return
+}
+
+// Address returns public address of the given transaction
+func (tx *transaction) Address() string {
+	v := abcitypes.UpdateValidator(tx.PublicKeyBytes(), 0, "")
+	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
+	if err != nil {
+		return ""
+	}
+	return string(pubkey.Address())
 }

@@ -48,9 +48,8 @@ type KatzenmintState struct {
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
 
 	// validator set
-	validators         map[[eddsa.PublicKeySize]byte]string
-	ValUpdates         []abcitypes.ValidatorUpdate
-	valAddrToPubKeyMap map[string]pc.PublicKey
+	validators map[string]pc.PublicKey
+	ValUpdates []abcitypes.ValidatorUpdate
 
 	// keep this for panic error?
 	// fatalErrCh chan error
@@ -58,6 +57,17 @@ type KatzenmintState struct {
 	// whether data was changed
 	dirty            bool
 	transactionBatch *badger.Txn
+}
+
+func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
+	p := make([]byte, eddsa.PublicKeySize)
+	copy(p, pk[:])
+	v := abcitypes.UpdateValidator(p, 0, "")
+	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
+	if err != nil {
+		return ""
+	}
+	return string(pubkey.Address())
 }
 
 func NewKatzenmintState(db *badger.DB) *KatzenmintState {
@@ -68,9 +78,8 @@ func NewKatzenmintState(db *badger.DB) *KatzenmintState {
 		authorizedAuthorities: make(map[[eddsa.PublicKeySize]byte]bool),
 		documents:             make(map[uint64]*document),
 		descriptors:           make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
-		validators:            make(map[[eddsa.PublicKeySize]byte]string),
 		ValUpdates:            make([]abcitypes.ValidatorUpdate, 1),
-		valAddrToPubKeyMap:    make(map[string]pc.PublicKey),
+		validators:            make(map[string]pc.PublicKey),
 	}
 }
 
@@ -96,15 +105,15 @@ func (state *KatzenmintState) Commit() {
 	state.blockHeight++
 }
 
-func (state *KatzenmintState) isAuthorized(address string) bool {
-	if _, ok := state.valAddrToPubKeyMap[address]; ok {
+func (state *KatzenmintState) isAuthorized(addr string) bool {
+	if _, ok := state.validators[addr]; ok {
 		return true
 	}
 	return false
 }
 
-func (state *KatzenmintState) GetAuthorized(address string) (pc.PublicKey, bool) {
-	pubkey, ok := state.valAddrToPubKeyMap[address]
+func (state *KatzenmintState) GetAuthorized(addr string) (pc.PublicKey, bool) {
+	pubkey, ok := state.validators[addr]
 	return pubkey, ok
 }
 
@@ -115,8 +124,8 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 	case 0:
 		return state.authorizedMixes[pk]
 	case pki.LayerProvider:
-		// check authorities
-		_, ok := state.validators[pk]
+		// check authorities, should use validator address
+		_, ok := state.validators[bytesToAddress(pk)]
 		return ok
 	default:
 		return false
@@ -250,6 +259,9 @@ func (state *KatzenmintState) VerifyAndParseAuthority(payload []byte) (*Authorit
 		return nil, err
 	}
 	// TODO: check authority
+	if _, ok := state.validators[bytesToAddress(authority.IdentityKey.ByteArray())]; ok {
+		return nil, fmt.Errorf("authority had been added")
+	}
 	return authority, nil
 }
 
@@ -258,7 +270,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if err != nil {
 		return fmt.Errorf("can't decode public key: %w", err)
 	}
-	key := []byte("val:" + string(pubkey.Bytes()))
+	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
 		// remove validator
@@ -273,7 +285,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 			return err
 		}
 		state.dirty = true
-		delete(state.valAddrToPubKeyMap, string(pubkey.Address()))
+		delete(state.validators, string(pubkey.Address()))
 	} else {
 		// add or update validator
 		value := bytes.NewBuffer(make([]byte, 0))
@@ -288,14 +300,13 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		state.dirty = true
 		if rawAuth != nil {
 			// save payload into database
-			key := state.storageKey([]byte(authoritiesBucket), v.PubKey.String(), 0)
 			if err := state.transactionBatch.Set([]byte(key), rawAuth); err != nil {
 				// Persistence failures are FATAL.
 				// state.fatalErrCh <- err
 				return err
 			}
 		}
-		state.valAddrToPubKeyMap[string(pubkey.Address())] = v.PubKey
+		state.validators[string(pubkey.Address())] = v.PubKey
 	}
 
 	state.ValUpdates = append(state.ValUpdates, v)

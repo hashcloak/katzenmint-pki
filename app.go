@@ -12,7 +12,7 @@ import (
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	// cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 )
 
 var (
@@ -22,6 +22,7 @@ var (
 type KatzenmintApplication struct {
 	state *KatzenmintState
 
+	// TODO: use tendermint logger?
 	// logger log.Logger
 }
 
@@ -63,13 +64,8 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	case PublishMixDescriptor:
 	case AddConsensusDocument:
 	case AddNewAuthority:
-		v := abcitypes.UpdateValidator(tx.PublicKeyBytes(), 0, "")
-		pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
-		if err != nil {
-			code = 5
-			return
-		}
-		if !app.state.isAuthorized(string(pubkey.Address())) {
+		addr := tx.Address()
+		if !app.state.isAuthorized(addr) {
 			fmt.Println("Non authorized authority")
 			code = 5
 			return
@@ -109,7 +105,6 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		if err = s11n.IsDescriptorWellFormed(desc, tx.Epoch); err != nil {
 			return
 		}
-		fmt.Printf("got mix descriptor: %+v\n, should update the descriptor!!\n", desc)
 		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
 			return
@@ -131,7 +126,6 @@ func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
 		if !app.state.isDocumentAuthorized(doc) {
 			return
 		}
-		fmt.Printf("got document: %+v\n, should update the document!!\n", doc)
 		err = app.state.updateDocument(payload, doc, tx.Epoch)
 		if err != nil {
 			return
@@ -209,14 +203,15 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 }
 
 func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	app.state.BeginBlock()
+	app.state.transactionBatch = app.state.NewTransaction(true)
 	for _, v := range req.Validators {
 		err := app.state.updateAuthority(nil, v)
 		if err != nil {
-			fmt.Println("Error updating validators")
+			fmt.Printf("Error updating validators: %+v\n", err)
 		}
 	}
-	app.state.Commit()
+	_ = app.state.transactionBatch.Commit()
+	app.state.transactionBatch = nil
 	return abcitypes.ResponseInitChain{}
 }
 

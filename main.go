@@ -27,26 +27,24 @@ var (
 	dbPath     string
 )
 
-func newTendermint(app abci.Application, configFile string) (*nm.Node, error) {
+func newTendermint(app abci.Application, configFile string) (node *nm.Node, err error) {
 	// read config
 	config := cfg.DefaultConfig()
 	config.RootDir = filepath.Dir(filepath.Dir(configFile))
 	viper.SetConfigFile(configFile)
-	if err := viper.ReadInConfig(); err != nil {
+	if err = viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("viper failed to read config file: %w", err)
 	}
-	if err := viper.Unmarshal(config); err != nil {
+	if err = viper.Unmarshal(config); err != nil {
 		return nil, fmt.Errorf("viper failed to unmarshal config: %w", err)
 	}
-	if err := config.ValidateBasic(); err != nil {
+	if err = config.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("config is invalid: %w", err)
 	}
 
 	// create logger
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	var err error
-	logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel)
-	if err != nil {
+	if logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel); err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
 	}
 
@@ -57,13 +55,13 @@ func newTendermint(app abci.Application, configFile string) (*nm.Node, error) {
 	)
 
 	// read node key
-	nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
-	if err != nil {
+	var nodeKey *p2p.NodeKey
+	if nodeKey, err = p2p.LoadNodeKey(config.NodeKeyFile()); err != nil {
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
 
 	// create node
-	node, err := nm.NewNode(
+	node, err = nm.NewNode(
 		config,
 		pv,
 		nodeKey,
@@ -95,8 +93,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-	app := NewKatzenmintApplication(db)
 
+	app := NewKatzenmintApplication(db)
 	node, err := newTendermint(app, configFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
@@ -112,6 +110,7 @@ func main() {
 		node.Wait()
 	}()
 
+	// TODO: watch the fatal error?
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c

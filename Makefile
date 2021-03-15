@@ -11,8 +11,9 @@ lint:
 	go mod tidy
 
 .PHONY: test
-test: 
-	go test --race ./...
+test:
+	go test --race s11n/*.go 
+	go test --race command.go query.go state.go authority.go encoding*.go transaction*.go
 
 
 .PHONY: setup

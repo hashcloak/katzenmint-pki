@@ -12,8 +12,8 @@ lint:
 
 .PHONY: test
 test:
-	go test --race s11n/*.go 
-	go test --race command.go query.go state.go authority.go encoding*.go transaction*.go
+	go test --race internal/s11n/*.go 
+	go test --race command.go query.go authority.go encoding*.go transaction*.go
 
 
 .PHONY: setup

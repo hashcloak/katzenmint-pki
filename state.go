@@ -40,16 +40,14 @@ type KatzenmintState struct {
 
 	db *badger.DB
 
-	authorizedMixes       map[[eddsa.PublicKeySize]byte]bool
-	authorizedAuthorities map[[eddsa.PublicKeySize]byte]bool
-	// authorityLinkKeys     map[[eddsa.PublicKeySize]byte]*ecdh.PublicKey
-
 	documents   map[uint64]*document
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
 
 	// validator set
-	validators map[string]pc.PublicKey
-	ValUpdates []abcitypes.ValidatorUpdate
+	validators       map[string]pc.PublicKey
+	validatorUpdates []abcitypes.ValidatorUpdate
+
+	deferCommit []func()
 
 	// keep this for panic error?
 	// fatalErrCh chan error
@@ -73,13 +71,12 @@ func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 func NewKatzenmintState(db *badger.DB) *KatzenmintState {
 	// should load the current state from database
 	return &KatzenmintState{
-		db:                    db,
-		authorizedMixes:       make(map[[eddsa.PublicKeySize]byte]bool),
-		authorizedAuthorities: make(map[[eddsa.PublicKeySize]byte]bool),
-		documents:             make(map[uint64]*document),
-		descriptors:           make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
-		ValUpdates:            make([]abcitypes.ValidatorUpdate, 1),
-		validators:            make(map[string]pc.PublicKey),
+		db:               db,
+		documents:        make(map[uint64]*document),
+		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
+		validatorUpdates: make([]abcitypes.ValidatorUpdate, 1),
+		validators:       make(map[string]pc.PublicKey),
+		deferCommit:      make([]func(), 0),
 	}
 }
 
@@ -90,7 +87,7 @@ func (state *KatzenmintState) BeginBlock() {
 	if state.transactionBatch == nil {
 		state.transactionBatch = state.NewTransaction(true)
 	}
-	state.ValUpdates = make([]abcitypes.ValidatorUpdate, 0)
+	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
 
 // TODO: put the transactions into block
@@ -101,6 +98,13 @@ func (state *KatzenmintState) Commit() {
 	if state.dirty {
 		_ = state.transactionBatch.Commit()
 		state.transactionBatch = nil
+		state.dirty = false
+	}
+	if len(state.deferCommit) > 0 {
+		for _, def := range state.deferCommit {
+			def()
+		}
+		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
 }
@@ -121,8 +125,8 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 	pk := desc.IdentityKey.ByteArray()
 
 	switch desc.Layer {
-	case 0:
-		return state.authorizedMixes[pk]
+	// case 0:
+	// 	return state.authorizedMixes[pk]
 	case pki.LayerProvider:
 		// check authorities, should use validator address
 		_, ok := state.validators[bytesToAddress(pk)]
@@ -160,6 +164,10 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 
 	// Note: Caller ensures that the epoch is the current epoch +- 1.
 	pk := desc.IdentityKey.ByteArray()
+
+	if epoch < state.blockHeight {
+		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
+	}
 
 	// Get the public key -> descriptor map for the epoch.
 	m, ok := state.descriptors[epoch]
@@ -200,14 +208,15 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
-	d := new(descriptor)
-	d.desc = desc
-	d.raw = rawDesc
-	m[pk] = d
+	state.deferCommit = append(state.deferCommit, func() {
+		d := new(descriptor)
+		d.desc = desc
+		d.raw = rawDesc
+		m[pk] = d
+	})
 
 	id := hex.EncodeToString(desc.IdentityKey.Bytes())
 	fmt.Printf("Node %s: Successfully submitted descriptor for epoch %v.", id, epoch)
-	// s.onUpdate()
 	return
 }
 
@@ -217,6 +226,9 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 
 	// Note: Caller ensures that the epoch is the current epoch +- 1.
 	// pk := doc.IdentityKey.ByteArray()
+	if epoch < state.blockHeight {
+		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
+	}
 
 	// Get the public key -> document map for the epoch.
 	m, ok := state.documents[epoch]
@@ -242,10 +254,12 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
-	d := new(document)
-	d.doc = doc
-	d.raw = rawDoc
-	state.documents[epoch] = d
+	state.deferCommit = append(state.deferCommit, func() {
+		d := new(document)
+		d.doc = doc
+		d.raw = rawDoc
+		state.documents[epoch] = d
+	})
 
 	fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
 	return
@@ -309,7 +323,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		state.validators[string(pubkey.Address())] = v.PubKey
 	}
 
-	state.ValUpdates = append(state.ValUpdates, v)
+	state.validatorUpdates = append(state.validatorUpdates, v)
 
 	return nil
 }

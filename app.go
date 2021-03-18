@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/dgraph-io/badger"
-	"github.com/hashcloak/katzenmint-pki/s11n"
+	"github.com/hashcloak/katzenmint-pki/internal/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
@@ -240,7 +240,7 @@ func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) ab
 // Update validators
 func (app *KatzenmintApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
 	// will there be race condition?
-	return abcitypes.ResponseEndBlock{ValidatorUpdates: app.state.ValUpdates}
+	return abcitypes.ResponseEndBlock{ValidatorUpdates: app.state.validatorUpdates}
 }
 
 // TODO: state sync connection

@@ -10,10 +10,12 @@ lint:
 	go fmt ./...
 	go mod tidy
 
+# added -race in future (badger fatal error: checkptr: pointer arithmetic result points to invalid allocation)
+# https://github.com/golang/go/issues/40917
 .PHONY: test
 test:
-	go test --race internal/s11n/*.go 
-	go test --race command.go query.go authority.go encoding*.go transaction*.go
+	go test internal/s11n/*.go 
+	go test command.go query.go authority.go encoding*.go transaction*.go state*.go
 
 
 .PHONY: setup

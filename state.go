@@ -24,6 +24,10 @@ const (
 	authoritiesBucket = "k_documents"
 )
 
+var (
+	errTransactionNotCreated = fmt.Errorf("should create database transaction first")
+)
+
 type descriptor struct {
 	desc *pki.MixDescriptor
 	raw  []byte
@@ -48,9 +52,6 @@ type KatzenmintState struct {
 	validatorUpdates []abcitypes.ValidatorUpdate
 
 	deferCommit []func()
-
-	// keep this for panic error?
-	// fatalErrCh chan error
 
 	// whether data was changed
 	dirty            bool
@@ -199,10 +200,11 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
+	if state.transactionBatch == nil {
+		return errTransactionNotCreated
+	}
 	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
 	if err := state.transactionBatch.Set([]byte(key), rawDesc); err != nil {
-		// Persistence failures are FATAL.
-		// state.fatalErrCh <- err
 		return err
 	}
 	state.dirty = true
@@ -232,11 +234,10 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 
 	// Get the public key -> document map for the epoch.
 	m, ok := state.documents[epoch]
-	if !ok {
+	if ok {
 		if !bytes.Equal(m.raw, rawDoc) {
 			return fmt.Errorf("state: Conflicting document for epoch %v", epoch)
 		}
-
 		// Redundant uploads that don't change are harmless.
 		return nil
 	}
@@ -245,10 +246,11 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	e.SetUint64(epoch)
 
 	// Persist the raw descriptor to disk.
+	if state.transactionBatch == nil {
+		return errTransactionNotCreated
+	}
 	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
 	if err := state.transactionBatch.Set([]byte(key), rawDoc); err != nil {
-		// Persistence failures are FATAL.
-		// state.fatalErrCh <- err
 		return err
 	}
 	state.dirty = true
@@ -284,6 +286,9 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if err != nil {
 		return fmt.Errorf("can't decode public key: %w", err)
 	}
+	if state.transactionBatch == nil {
+		return errTransactionNotCreated
+	}
 	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
@@ -307,16 +312,12 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 			return fmt.Errorf("error encoding validator: %v", err)
 		}
 		if err = state.transactionBatch.Set(key, value.Bytes()); err != nil {
-			// Persistence failures are FATAL.
-			// state.fatalErrCh <- err
 			return err
 		}
 		state.dirty = true
 		if rawAuth != nil {
 			// save payload into database
 			if err := state.transactionBatch.Set([]byte(key), rawAuth); err != nil {
-				// Persistence failures are FATAL.
-				// state.fatalErrCh <- err
 				return err
 			}
 		}
@@ -329,7 +330,8 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 }
 
 func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, error) {
-	// var generationDeadline = 10
+	// TODO: postpone the document for some blocks?
+	// var postponDeadline = 10
 
 	state.RLock()
 	defer state.RUnlock()
@@ -341,42 +343,6 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("nil document for epoch %d", epoch)
 	}
-
-	// Otherwise, return an error based on the time.
-	// now, elapsed, _ := epochtime.Now()
-	// switch epoch {
-	// case now:
-	// 	// Check to see if we are doing a bootstrap, and it's possible that
-	// 	// we may decide to publish a document at some point ignoring the
-	// 	// standard schedule.
-	// 	if now == s.bootstrapEpoch || now - 1 == s.bootstrapEpoch {
-	// 		return nil, errNotYet
-	// 	}
-
-	// 	// We missed the deadline to publish a descriptor for the current
-	// 	// epoch, so we will never be able to service this request.
-	// 	s.log.Errorf("No document for current epoch %v generated and never will be", now)
-	// 	return nil, errGone
-	// case now + 1:
-	// 	if now == s.bootstrapEpoch {
-	// 		return nil, errNotYet
-	// 	}
-	// 	// If it's past the time by which we should have generated a document
-	// 	// then we will never be able to service this.
-	// 	if elapsed > generationDeadline {
-	// 		s.log.Errorf("No document for next epoch %v and it's already past 7/8 of previous epoch", now+1)
-	// 		return nil, errGone
-	// 	}
-	// 	return nil, errNotYet
-	// default:
-	// 	if epoch < now {
-	// 		// Requested epoch is in the past, and it's not in the cache.
-	// 		// We will never be able to satisfy this request.
-	// 		s.log.Errorf("No document for epoch %v, because we are already in %v", epoch, now)
-	// 		return nil, errGone
-	// 	}
-	// 	return nil, fmt.Errorf("state: Request for invalid epoch: %v", epoch)
-	// }
 
 	// NOTREACHED
 	return nil, nil

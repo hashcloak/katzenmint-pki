@@ -12,7 +12,12 @@ import (
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	// "github.com/tendermint/tendermint/version"
 	// cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+)
+
+const (
+	ProtocolVersion uint64 = 0x0
 )
 
 var (
@@ -34,8 +39,13 @@ func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
 }
 
 func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-	// return normal blockchain info
-	return abcitypes.ResponseInfo{}
+	return abcitypes.ResponseInfo{
+		// Data:             fmt.Sprintf("{\"blockHeight\":%v}", app.state.blockHeight),
+		// Version:          version.ABCIVersion,
+		// AppVersion:       ProtocolVersion,
+		// LastBlockHeight:  int64(app.state.blockHeight),
+		// LastBlockAppHash: make([]byte, 8),
+	}
 }
 
 func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {

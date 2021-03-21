@@ -11,7 +11,6 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/viper"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
@@ -110,7 +109,6 @@ func main() {
 		node.Wait()
 	}()
 
-	// TODO: watch the fatal error?
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c

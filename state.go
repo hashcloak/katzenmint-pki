@@ -112,9 +112,9 @@ func (state *KatzenmintState) Commit() {
 
 func (state *KatzenmintState) isAuthorized(addr string) bool {
 	if _, ok := state.validators[addr]; ok {
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 func (state *KatzenmintState) GetAuthorized(addr string) (pc.PublicKey, bool) {

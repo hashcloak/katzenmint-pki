@@ -104,7 +104,7 @@ func TestUpdateDescriptor(t *testing.T) {
 		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
 	}
 	state.Commit()
-	// _ = state.transactionBatch.Commit()
+
 	pk := desc.IdentityKey.ByteArray()
 	if m, ok := state.descriptors[testEpoch]; !ok {
 		t.Fatal("Failed to update mix descriptor\n")
@@ -181,14 +181,14 @@ func TestUpdateDocument(t *testing.T) {
 	}
 	defer cleanTest(db, testDocumentDBPath)
 	state := createState(db)
-	// state.transactionBatch = state.NewTransaction(true)
+
 	state.BeginBlock()
 	err = state.updateDocument(rawDoc, ddoc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update pki document: %+v\n", err)
 	}
 	state.Commit()
-	// _ = state.transactionBatch.Commit()
+
 	if _, ok := state.documents[testEpoch]; !ok {
 		t.Fatal("Failed to update pki document\n")
 	}
@@ -226,7 +226,7 @@ func TestUpdateAuthority(t *testing.T) {
 	}
 	defer cleanTest(db, testAuthorityDBPath)
 	state := createState(db)
-	// state.transactionBatch = state.NewTransaction(true)
+
 	state.BeginBlock()
 	err = state.updateAuthority(rawAuth, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
 	if err != nil {
@@ -234,7 +234,7 @@ func TestUpdateAuthority(t *testing.T) {
 		return
 	}
 	state.Commit()
-	// _ = state.transactionBatch.Commit()
+
 	key := state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
 	rtx := state.NewTransaction(false)
 	_, err = rtx.Get(key)

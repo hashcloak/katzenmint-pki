@@ -15,7 +15,7 @@ lint:
 .PHONY: test
 test:
 	go test internal/s11n/*.go 
-	go test command.go query.go authority.go encoding*.go transaction*.go state*.go
+	go test command.go query.go authority.go encoding*.go transaction*.go state*.go app*.go
 
 
 .PHONY: setup

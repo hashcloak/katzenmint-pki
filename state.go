@@ -289,8 +289,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if state.transactionBatch == nil {
 		return errTransactionNotCreated
 	}
-	key := []byte(authoritiesBucket + string(pubkey.Bytes()))
-	// key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
+	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
 		// remove validator

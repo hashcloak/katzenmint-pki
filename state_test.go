@@ -15,6 +15,7 @@ import (
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	// "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,6 +24,7 @@ const (
 	testEpoch               = 1
 	testDescriptorDBPath    = "./testdescdb"
 	testDocumentDBPath      = "./testdocdb"
+	testAuthorityDBPath     = "./testauthdb"
 	sharedRandomLength      = 40
 	sharedRandomValueLength = 32
 )
@@ -91,19 +93,19 @@ func TestUpdateDescriptor(t *testing.T) {
 	}
 	db, err := badger.Open(badger.DefaultOptions(testDescriptorDBPath))
 	if err != nil {
-		t.Fatalf("failed to open badger db: %v\n", err)
+		t.Fatalf("Failed to open badger db: %v\n", err)
 	}
 	defer cleanTest(db, testDescriptorDBPath)
 	state := createState(db)
-	// call BeginBlock
 	state.BeginBlock()
+	state.transactionBatch = state.NewTransaction(true)
 	err = state.updateMixDescriptor(rawDesc, desc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
 	}
-	pk := desc.IdentityKey.ByteArray()
-	// save data to db
 	state.Commit()
+	// _ = state.transactionBatch.Commit()
+	pk := desc.IdentityKey.ByteArray()
 	if m, ok := state.descriptors[testEpoch]; !ok {
 		t.Fatal("Failed to update mix descriptor\n")
 	} else {
@@ -175,18 +177,18 @@ func TestUpdateDocument(t *testing.T) {
 	}
 	db, err := badger.Open(badger.DefaultOptions(testDocumentDBPath))
 	if err != nil {
-		t.Fatalf("failed to open badger db: %v\n", err)
+		t.Fatalf("Failed to open badger db: %v\n", err)
 	}
 	defer cleanTest(db, testDocumentDBPath)
 	state := createState(db)
-	// call BeginBlock
+	// state.transactionBatch = state.NewTransaction(true)
 	state.BeginBlock()
 	err = state.updateDocument(rawDoc, ddoc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update pki document: %+v\n", err)
 	}
-	// save data to db
 	state.Commit()
+	// _ = state.transactionBatch.Commit()
 	if _, ok := state.documents[testEpoch]; !ok {
 		t.Fatal("Failed to update pki document\n")
 	}
@@ -198,5 +200,48 @@ func TestUpdateDocument(t *testing.T) {
 	_, err = rtx.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get pki document from database: %+v\n", err)
+	}
+}
+
+func TestUpdateAuthority(t *testing.T) {
+	// assert := assert.New(t)
+	require := require.New(t)
+	authority := new(Authority)
+
+	authority.Auth = "katzenmint"
+	authority.Power = 1
+	k, err := eddsa.NewKeypair(rand.Reader)
+	require.NoError(err, "eddsa.NewKeypair()")
+	authority.IdentityKey = k.PublicKey()
+	linkPriv, err := ecdh.NewKeypair(rand.Reader)
+	require.NoError(err, "ecdh.NewKeypair()")
+	authority.LinkKey = linkPriv.PublicKey()
+	rawAuth, err := json.Marshal(authority)
+	if err != nil {
+		t.Fatalf("Failed to marshal authority: %+v\n", err)
+	}
+	db, err := badger.Open(badger.DefaultOptions(testAuthorityDBPath))
+	if err != nil {
+		t.Fatalf("Failed to open badger db: %v\n", err)
+	}
+	defer cleanTest(db, testAuthorityDBPath)
+	state := createState(db)
+	// state.transactionBatch = state.NewTransaction(true)
+	state.BeginBlock()
+	err = state.updateAuthority(rawAuth, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
+	if err != nil {
+		fmt.Printf("Failed to update authority: %+v\n", err)
+		return
+	}
+	state.Commit()
+	// _ = state.transactionBatch.Commit()
+	key := state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
+	rtx := state.NewTransaction(false)
+	_, err = rtx.Get(key)
+	if err != nil {
+		t.Fatalf("Failed to get authority from database: %+v\n", err)
+	}
+	if len(state.validatorUpdates) != 1 {
+		t.Fatal("Failed to update authority\n")
 	}
 }

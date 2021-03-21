@@ -21,7 +21,7 @@ import (
 const (
 	descriptorsBucket = "k_descriptors"
 	documentsBucket   = "k_documents"
-	authoritiesBucket = "k_documents"
+	authoritiesBucket = "k_authorities"
 )
 
 var (
@@ -289,7 +289,8 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if state.transactionBatch == nil {
 		return errTransactionNotCreated
 	}
-	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
+	key := []byte(authoritiesBucket + string(pubkey.Bytes()))
+	// key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
 		// remove validator
@@ -306,6 +307,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		state.dirty = true
 		delete(state.validators, string(pubkey.Address()))
 	} else {
+		// TODO: make sure the voting power not exceed 1/3
 		// add or update validator
 		value := bytes.NewBuffer(make([]byte, 0))
 		if err := abcitypes.WriteMessage(&v, value); err != nil {

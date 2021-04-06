@@ -1,8 +1,6 @@
 package main
 
 import (
-	// "crypto/ed25519"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -21,12 +19,10 @@ import (
 )
 
 const (
-	testEpoch               = 1
-	testDescriptorDBPath    = "./testdescdb"
-	testDocumentDBPath      = "./testdocdb"
-	testAuthorityDBPath     = "./testauthdb"
-	sharedRandomLength      = 40
-	sharedRandomValueLength = 32
+	testEpoch            = 1
+	testDescriptorDBPath = "./testdescdb"
+	testDocumentDBPath   = "./testdocdb"
+	testAuthorityDBPath  = "./testauthdb"
 )
 
 // create test state
@@ -132,21 +128,17 @@ func TestUpdateDocument(t *testing.T) {
 	require.NoError(err, "eddsa.NewKeypair()")
 
 	testSendRate := uint64(3)
-	sharedRandomCommit := make([]byte, sharedRandomLength)
-	binary.BigEndian.PutUint64(sharedRandomCommit[:8], testEpoch)
 
 	// Generate a Document.
 	doc := &s11n.Document{
-		Epoch:              testEpoch,
-		GenesisEpoch:       testEpoch,
-		SendRatePerMinute:  testSendRate,
-		Topology:           make([][][]byte, 3),
-		Mu:                 0.42,
-		MuMaxDelay:         23,
-		LambdaP:            0.69,
-		LambdaPMaxDelay:    17,
-		SharedRandomCommit: sharedRandomCommit,
-		SharedRandomValue:  make([]byte, sharedRandomValueLength),
+		Epoch:             testEpoch,
+		GenesisEpoch:      testEpoch,
+		SendRatePerMinute: testSendRate,
+		Topology:          make([][][]byte, 3),
+		Mu:                0.42,
+		MuMaxDelay:        23,
+		LambdaP:           0.69,
+		LambdaPMaxDelay:   17,
 	}
 	idx := 1
 	for l := 0; l < 3; l++ {

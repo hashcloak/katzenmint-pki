@@ -17,7 +17,6 @@
 package s11n
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -31,10 +30,6 @@ import (
 const (
 	// DocumentVersion is the string identifying the format of the Document
 	DocumentVersion = "document-v0"
-	// SharedRandomLength is the length in bytes of a SharedRandomCommit.
-	SharedRandomLength = 40
-	// SharedRandomValueLength is the length in bytes of a SharedRandomValue.
-	SharedRandomValueLength = 32
 )
 
 var (
@@ -67,10 +62,6 @@ type Document struct {
 
 	Topology  [][][]byte
 	Providers [][]byte
-
-	SharedRandomCommit []byte
-	SharedRandomValue  []byte
-	PriorSharedRandom  [][]byte
 }
 
 // FromPayload deserializes, then verifies a Document, and returns the Document or error.
@@ -152,42 +143,11 @@ func VerifyAndParseDocument(b []byte, verifier cert.Verifier) (*pki.Document, er
 		return nil, fmt.Errorf("Invalid Document Version: '%v'", d.Version)
 	}
 
-	// Convert from the wire representation to a Document, and validate
-	// everything.
-
-	// If there is a SharedRandomCommit, verify the Epoch contained in SharedRandomCommit matches the Epoch in the Document.
-	if len(d.SharedRandomCommit) == SharedRandomLength {
-		srvEpoch := binary.BigEndian.Uint64(d.SharedRandomCommit[0:8])
-		if srvEpoch != d.Epoch {
-			return nil, fmt.Errorf("Document with invalid Epoch in SharedRandomCommit")
-
-		}
-	}
-	if len(d.SharedRandomValue) != SharedRandomValueLength {
-		if len(d.SharedRandomValue) != 0 {
-			return nil, fmt.Errorf("Document has invalid SharedRandomValue")
-		} else if len(d.SharedRandomCommit) != SharedRandomLength {
-			return nil, fmt.Errorf("Document has invalid SharedRandomCommit")
-		}
-	}
-	if len(d.SharedRandomCommit) != SharedRandomLength {
-		if len(d.SharedRandomCommit) != 0 {
-			return nil, fmt.Errorf("Document has invalid SharedRandomCommit")
-		} else if len(d.SharedRandomValue) != SharedRandomValueLength {
-			return nil, fmt.Errorf("Document has invalid SharedRandomValue")
-		}
-	}
 	if d.GenesisEpoch == 0 {
 		return nil, fmt.Errorf("Document has invalid GenesisEpoch")
 	}
-	if len(d.PriorSharedRandom) == 0 && d.GenesisEpoch != d.Epoch {
-		return nil, fmt.Errorf("Document has invalid PriorSharedRandom")
-	}
 
 	doc := new(pki.Document)
-	doc.SharedRandomCommit = d.SharedRandomCommit
-	doc.PriorSharedRandom = d.PriorSharedRandom
-	doc.SharedRandomValue = d.SharedRandomValue
 	doc.Epoch = d.Epoch
 	doc.GenesisEpoch = d.GenesisEpoch
 	doc.SendRatePerMinute = d.SendRatePerMinute

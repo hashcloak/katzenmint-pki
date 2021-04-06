@@ -18,7 +18,6 @@ package s11n
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"testing"
 
@@ -74,21 +73,17 @@ func TestDocument(t *testing.T) {
 	require.NoError(err, "eddsa.NewKeypair()")
 
 	testSendRate := uint64(3)
-	sharedRandomCommit := make([]byte, SharedRandomLength)
-	binary.BigEndian.PutUint64(sharedRandomCommit[:8], debugTestEpoch)
 
 	// Generate a Document.
 	doc := &Document{
-		Epoch:              debugTestEpoch,
-		GenesisEpoch:       debugTestEpoch,
-		SendRatePerMinute:  testSendRate,
-		Topology:           make([][][]byte, 3),
-		Mu:                 0.42,
-		MuMaxDelay:         23,
-		LambdaP:            0.69,
-		LambdaPMaxDelay:    17,
-		SharedRandomCommit: sharedRandomCommit,
-		SharedRandomValue:  make([]byte, SharedRandomValueLength),
+		Epoch:             debugTestEpoch,
+		GenesisEpoch:      debugTestEpoch,
+		SendRatePerMinute: testSendRate,
+		Topology:          make([][][]byte, 3),
+		Mu:                0.42,
+		MuMaxDelay:        23,
+		LambdaP:           0.69,
+		LambdaPMaxDelay:   17,
 	}
 	idx := 1
 	for l := 0; l < 3; l++ {

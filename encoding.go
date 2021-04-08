@@ -1,4 +1,4 @@
-package main
+package katzenmint
 
 import (
 	"encoding/hex"

@@ -1,4 +1,4 @@
-package main
+package katzenmint
 
 // query represents the query request
 type query struct {

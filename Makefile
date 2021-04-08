@@ -21,3 +21,7 @@ test:
 .PHONY: setup
 setup:
 	sh setup.sh
+
+.PHONY: build
+build:
+	go build -o katzenmint cmd/katzenmint.go

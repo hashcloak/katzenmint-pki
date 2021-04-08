@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/dgraph-io/badger"
+	katzenmint "github.com/hashcloak/katzenmint-pki"
 	"github.com/spf13/viper"
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
@@ -93,7 +94,7 @@ func main() {
 	}
 	defer db.Close()
 
-	app := NewKatzenmintApplication(db)
+	app := katzenmint.NewKatzenmintApplication(db)
 	node, err := newTendermint(app, configFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)

@@ -30,9 +30,9 @@ type signTransaction struct {
 	Payload string
 }
 
-// TODO: find a better way to represent the transaction
+// TODO: find a better way to represent the Transaction
 // maybe add nonce? switch to rlp encoding?
-type transaction struct {
+type Transaction struct {
 	// version
 	Version string
 
@@ -53,7 +53,7 @@ type transaction struct {
 }
 
 // SerializeHash return the serialize hash that user signed of the given transaction
-func (tx *transaction) SerializeHash() (hash [32]byte) {
+func (tx *Transaction) SerializeHash() (hash [32]byte) {
 	signTx := new(signTransaction)
 	signTx.Version = tx.Version
 	signTx.Epoch = tx.Epoch
@@ -68,7 +68,7 @@ func (tx *transaction) SerializeHash() (hash [32]byte) {
 	return
 }
 
-func (tx *transaction) IsVerified() (isVerified bool) {
+func (tx *Transaction) IsVerified() (isVerified bool) {
 	msgHash := tx.SerializeHash()
 	if len(msgHash) <= 0 {
 		return
@@ -81,20 +81,20 @@ func (tx *transaction) IsVerified() (isVerified bool) {
 }
 
 // PublicKeyBytes returns public key bytes of the given transaction
-func (tx *transaction) PublicKeyBytes() (pk []byte) {
+func (tx *Transaction) PublicKeyBytes() (pk []byte) {
 	pk = DecodeHex(tx.PublicKey)
 	return
 }
 
 // PublicKeyByteArray returns public key bytes of the given transaction
-func (tx *transaction) PublicKeyByteArray() (pk [eddsa.PublicKeySize]byte) {
+func (tx *Transaction) PublicKeyByteArray() (pk [eddsa.PublicKeySize]byte) {
 	pubkey := DecodeHex(tx.PublicKey)
 	copy(pk[:], pubkey)
 	return
 }
 
 // Address returns public address of the given transaction
-func (tx *transaction) Address() string {
+func (tx *Transaction) Address() string {
 	v := abcitypes.UpdateValidator(tx.PublicKeyBytes(), 0, "")
 	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
 	if err != nil {

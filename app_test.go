@@ -73,7 +73,7 @@ func TestAddAuthority(t *testing.T) {
 			}
 
 			// add authority
-			tx := new(transaction)
+			tx := new(Transaction)
 			tx.Version = fmt.Sprintf("%d", ProtocolVersion)
 			tx.Epoch = 1
 			tx.Command = AddNewAuthority

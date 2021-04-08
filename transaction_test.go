@@ -25,7 +25,7 @@ func TestTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot json marshal payload: %+v\n", err)
 	}
-	tx := new(transaction)
+	tx := new(Transaction)
 	tx.Version = "1.0"
 	tx.Epoch = 10
 	tx.Command = 1

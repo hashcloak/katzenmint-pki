@@ -1,7 +1,7 @@
 package katzenmint
 
-// query represents the query request
-type query struct {
+// Query represents the Query request
+type Query struct {
 	// version
 	Version string
 

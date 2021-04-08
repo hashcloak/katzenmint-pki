@@ -52,8 +52,8 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *transaction) {
-	tx = new(transaction)
+func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *Transaction) {
+	tx = new(Transaction)
 	if err := json.Unmarshal(rawTx, tx); err != nil {
 		code = 1
 		return
@@ -88,7 +88,7 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *tran
 	return
 }
 
-func (app *KatzenmintApplication) executeTx(tx *transaction) (err error) {
+func (app *KatzenmintApplication) executeTx(tx *Transaction) (err error) {
 	switch tx.Command {
 	case PublishMixDescriptor:
 		var verifier cert.Verifier
@@ -189,7 +189,7 @@ func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 // TODO: include merkle proof?
 func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 
-	kquery := new(query)
+	kquery := new(Query)
 	if err := json.Unmarshal(rquery.Data, kquery); err != nil {
 		resQuery.Log = "unsupported query"
 		// resQuery.value = "unsupported query"

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/badger"
-	"github.com/katzenpost/core/crypto/ecdh"
+	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +63,8 @@ func TestAddAuthority(t *testing.T) {
 			privKey, err := eddsa.NewKeypair(rand.Reader)
 			require.NoError(err, "eddsa.NewKeypair()")
 			authority.IdentityKey = privKey.PublicKey()
-			linkPriv, err := ecdh.NewKeypair(rand.Reader)
+			// linkPriv, err := ecdh.NewKeypair(rand.Reader)
+			linkPriv := privKey.ToECDH()
 			require.NoError(err, "ecdh.NewKeypair()")
 			authority.LinkKey = linkPriv.PublicKey()
 			rawAuth, err := json.Marshal(authority)

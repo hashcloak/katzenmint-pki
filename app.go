@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/dgraph-io/badger"
-	"github.com/hashcloak/katzenmint-pki/internal/s11n"
+	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"

@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/badger"
-	"github.com/hashcloak/katzenmint-pki/internal/s11n"
+	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+
 	// "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

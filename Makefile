@@ -14,7 +14,7 @@ lint:
 # https://github.com/golang/go/issues/40917
 .PHONY: test
 test:
-	go test internal/s11n/*.go 
+	go test s11n/*.go 
 	go test command.go query.go authority.go encoding*.go transaction*.go state*.go app*.go
 
 

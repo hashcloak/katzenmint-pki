@@ -102,3 +102,11 @@ func (tx *Transaction) Address() string {
 	}
 	return string(pubkey.Address())
 }
+
+// Appends the public key and a signature to the transaction
+func (tx *Transaction) AppendSignature(privKey ed25519.PrivateKey) {
+	tx.PublicKey = EncodeHex(privKey.Public().(ed25519.PublicKey))
+	msgHash := tx.SerializeHash()
+	sig := ed25519.Sign(privKey, msgHash[:])
+	tx.Signature = EncodeHex(sig[:])
+}

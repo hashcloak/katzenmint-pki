@@ -191,23 +191,26 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 
 	kquery := new(Query)
 	if err := json.Unmarshal(rquery.Data, kquery); err != nil {
-		resQuery.Log = "unsupported query"
-		// resQuery.value = "unsupported query"
+		resQuery.Log = "error query format"
+		resQuery.Code = 0x1
 		return
 	}
 	switch kquery.Command {
+	default:
+		resQuery.Log = "unsupported query"
+		resQuery.Code = 0x2
 	case GetConsensus:
 		doc, err := app.state.documentForEpoch(kquery.Epoch)
 		if err != nil {
 			fmt.Printf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err)
-			resQuery.Log = "does not exist"
+			resQuery.Log = "document does not exist"
+			resQuery.Code = 0x3
 		} else {
+			resQuery.Key = rquery.Data
 			resQuery.Value = doc
+			resQuery.Height = int64(app.state.blockHeight)
+			// TODO: provide proof ops
 		}
-	default:
-		resQuery.Log = "unsupported query"
-		// resQuery.value = "unsupported query"
-		return
 	}
 	return
 }

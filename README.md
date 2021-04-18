@@ -1,4 +1,6 @@
 # katzenmint-pki
+[![Go](https://github.com/hashcloak/katzenmint-pki/actions/workflows/go.yml/badge.svg)](https://github.com/hashcloak/katzenmint-pki/actions/workflows/go.yml)
+
 A BFT PKI for the Katzenpost Authority PKI System using Tendermint
 
 ## Overview 

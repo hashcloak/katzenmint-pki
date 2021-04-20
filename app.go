@@ -3,7 +3,6 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	// "crypto/sha256"
-	"encoding/json"
 	"fmt"
 
 	"github.com/dgraph-io/badger"
@@ -12,6 +11,7 @@ import (
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/ugorji/go/codec"
 	// "github.com/tendermint/tendermint/version"
 	// cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 )
@@ -54,7 +54,8 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 
 func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *Transaction) {
 	tx = new(Transaction)
-	if err := json.Unmarshal(rawTx, tx); err != nil {
+	dec := codec.NewDecoderBytes(rawTx, jsonHandle)
+	if err := dec.Decode(tx); err != nil {
 		code = 1
 		return
 	}
@@ -190,7 +191,8 @@ func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 
 	kquery := new(Query)
-	if err := json.Unmarshal(rquery.Data, kquery); err != nil {
+	dec := codec.NewDecoderBytes(rquery.Data, jsonHandle)
+	if err := dec.Decode(kquery); err != nil {
 		resQuery.Log = "error query format"
 		resQuery.Code = 0x1
 		return

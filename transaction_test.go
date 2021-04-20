@@ -2,10 +2,10 @@ package katzenmint
 
 import (
 	"crypto/ed25519"
-	"encoding/json"
 	"testing"
 
 	"github.com/katzenpost/core/crypto/rand"
+	"github.com/ugorji/go/codec"
 )
 
 type Payload struct {
@@ -18,11 +18,12 @@ func TestTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot generate key pair: %+v\n", err)
 	}
-	payload, err := json.Marshal(Payload{
+	payload := make([]byte, 128)
+	enc := codec.NewEncoderBytes(&payload, jsonHandle)
+	if err := enc.Encode(Payload{
 		Text:   "test",
 		Number: 1,
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("cannot json marshal payload: %+v\n", err)
 	}
 	tx := new(Transaction)

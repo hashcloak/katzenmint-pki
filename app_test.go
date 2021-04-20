@@ -2,12 +2,12 @@ package katzenmint
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/dgraph-io/badger"
+	"github.com/ugorji/go/codec"
 	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
@@ -67,8 +67,10 @@ func TestAddAuthority(t *testing.T) {
 			linkPriv := privKey.ToECDH()
 			require.NoError(err, "ecdh.NewKeypair()")
 			authority.LinkKey = linkPriv.PublicKey()
-			rawAuth, err := json.Marshal(authority)
-			if err != nil {
+
+			rawAuth := make([]byte, 128)
+			enc := codec.NewEncoderBytes(&rawAuth, jsonHandle)
+			if err := enc.Encode(authority); err != nil {
 				t.Fatalf("Failed to marshal authority: %+v\n", err)
 			}
 
@@ -86,7 +88,13 @@ func TestAddAuthority(t *testing.T) {
 			if !tx.IsVerified() {
 				t.Fatalf("Transaction is not verified: %+v\n", tx)
 			}
-			encTx, _ := json.Marshal(tx)
+
+			encTx := make([]byte, 128)
+			enc2 := codec.NewEncoderBytes(&encTx, jsonHandle)
+			if err := enc2.Encode(tx); err != nil {
+				t.Fatalf("Failed to marshal transaction: %+v\n", err)
+			}
+
 			m.App.BeginBlock(abcitypes.RequestBeginBlock{})
 			res, err := m.BroadcastTxCommit(context.Background(), types.Tx(encTx))
 			require.Nil(err)

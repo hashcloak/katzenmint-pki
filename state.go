@@ -3,12 +3,12 @@ package katzenmint
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
 
 	"github.com/dgraph-io/badger"
+	"github.com/ugorji/go/codec"
 	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
@@ -26,7 +26,15 @@ const (
 
 var (
 	errTransactionNotCreated = fmt.Errorf("should create database transaction first")
+	jsonHandle               *codec.JsonHandle
 )
+
+func init() {
+	jsonHandle = new(codec.JsonHandle)
+	jsonHandle.Canonical = true
+	jsonHandle.IntegerAsString = 'A'
+	jsonHandle.MapKeyAsString = true
+}
 
 type descriptor struct {
 	desc *pki.MixDescriptor
@@ -268,10 +276,9 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 }
 
 func (state *KatzenmintState) VerifyAndParseAuthority(payload []byte) (*Authority, error) {
-	// Parse the payload.
 	authority := new(Authority)
-	err := json.Unmarshal(payload, authority)
-	if err != nil {
+	dec := codec.NewDecoderBytes(payload, jsonHandle)
+	if err := dec.Decode(authority); err != nil {
 		return nil, err
 	}
 	// TODO: check authority

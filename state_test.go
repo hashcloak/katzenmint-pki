@@ -1,7 +1,6 @@
 package katzenmint
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/ugorji/go/codec"
 
 	// "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,8 +84,9 @@ func createDescriptor(require *require.Assertions, idx int, layer int) (*pki.Mix
 func TestUpdateDescriptor(t *testing.T) {
 	require := require.New(t)
 	desc, _ := createDescriptor(require, 1, pki.LayerProvider)
-	rawDesc, err := json.Marshal(desc)
-	if err != nil {
+	rawDesc := make([]byte, 10)
+	enc := codec.NewEncoderBytes(&rawDesc, jsonHandle)
+	if err := enc.Encode(desc); err != nil {
 		t.Fatalf("Failed to marshal mix descriptor: %+v\n", err)
 	}
 	db, err := badger.Open(badger.DefaultOptions(testDescriptorDBPath))
@@ -164,8 +165,9 @@ func TestUpdateDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to VerifyAndParseDocument document: %+v\n", err)
 	}
-	rawDoc, err := json.Marshal(ddoc)
-	if err != nil {
+	rawDoc := make([]byte, 10)
+	enc := codec.NewEncoderBytes(&rawDoc, jsonHandle)
+	if err := enc.Encode(ddoc); err != nil {
 		t.Fatalf("Failed to marshal pki document: %+v\n", err)
 	}
 	db, err := badger.Open(badger.DefaultOptions(testDocumentDBPath))
@@ -209,8 +211,9 @@ func TestUpdateAuthority(t *testing.T) {
 	linkPriv, err := ecdh.NewKeypair(rand.Reader)
 	require.NoError(err, "ecdh.NewKeypair()")
 	authority.LinkKey = linkPriv.PublicKey()
-	rawAuth, err := json.Marshal(authority)
-	if err != nil {
+	rawAuth := make([]byte, 10)
+	enc := codec.NewEncoderBytes(&rawAuth, jsonHandle)
+	if err := enc.Encode(authority); err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
 	db, err := badger.Open(badger.DefaultOptions(testAuthorityDBPath))

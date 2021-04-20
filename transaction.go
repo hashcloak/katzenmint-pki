@@ -3,11 +3,11 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/json"
 
 	"github.com/katzenpost/core/crypto/eddsa"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/ugorji/go/codec"
 )
 
 // TODO: cache the hex decode result?
@@ -53,18 +53,19 @@ type Transaction struct {
 }
 
 // SerializeHash return the serialize hash that user signed of the given transaction
-func (tx *Transaction) SerializeHash() (hash [32]byte) {
+func (tx *Transaction) SerializeHash() (txHash [32]byte) {
 	signTx := new(signTransaction)
 	signTx.Version = tx.Version
 	signTx.Epoch = tx.Epoch
 	signTx.Command = tx.Command
 	signTx.PublicKey = tx.PublicKey
 	signTx.Payload = tx.Payload
-	src, err := json.Marshal(signTx)
-	if err != nil {
+	serializedTx := make([]byte, 128)
+	enc := codec.NewEncoderBytes(&serializedTx, jsonHandle)
+	if err := enc.Encode(signTx); err != nil {
 		return
 	}
-	hash = sha256.Sum256(src)
+	txHash = sha256.Sum256(serializedTx)
 	return
 }
 

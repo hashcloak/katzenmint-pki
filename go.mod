@@ -3,6 +3,7 @@ module github.com/hashcloak/katzenmint-pki
 go 1.15
 
 require (
+	github.com/cosmos/iavl v0.15.3
 	github.com/google/go-cmp v0.5.4 // indirect
 	// github.com/hashcloak/katzenmint-pki v0.0.0-20200825134709-8604e7226b71
 	github.com/katzenpost/core v0.0.11

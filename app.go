@@ -223,15 +223,12 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 }
 
 func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	app.state.transactionBatch = app.state.NewTransaction()
 	for _, v := range req.Validators {
 		err := app.state.updateAuthority(nil, v)
 		if err != nil {
 			fmt.Printf("Error updating validators: %+v\n", err)
 		}
 	}
-	_ = app.state.transactionBatch.Close()
-	app.state.transactionBatch = nil
 	return abcitypes.ResponseInitChain{}
 }
 

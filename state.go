@@ -2,11 +2,13 @@ package katzenmint
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"sync"
 
+	"github.com/cosmos/iavl"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
 
@@ -27,8 +29,7 @@ const (
 )
 
 var (
-	errTransactionNotCreated = fmt.Errorf("should create database transaction first")
-	jsonHandle               *codec.JsonHandle
+	jsonHandle *codec.JsonHandle
 )
 
 func init() {
@@ -52,7 +53,7 @@ type KatzenmintState struct {
 	sync.RWMutex
 	blockHeight uint64
 
-	db dbm.DB
+	tree *iavl.MutableTree
 
 	documents   map[uint64]*document
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
@@ -64,8 +65,7 @@ type KatzenmintState struct {
 	deferCommit []func()
 
 	// whether data was changed
-	dirty            bool
-	transactionBatch dbm.Batch
+	dirty bool
 }
 
 func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
@@ -80,9 +80,13 @@ func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 }
 
 func NewKatzenmintState(db dbm.DB) *KatzenmintState {
-	// should load the current state from database
+	// TODO: should load the current state from database
+	tree, err := iavl.NewMutableTree(db, 100)
+	if err != nil {
+		panic(fmt.Errorf("error creating iavl tree"))
+	}
 	return &KatzenmintState{
-		db:               db,
+		tree:             tree,
 		documents:        make(map[uint64]*document),
 		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
 		validatorUpdates: make([]abcitypes.ValidatorUpdate, 1),
@@ -94,23 +98,12 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 func (state *KatzenmintState) BeginBlock() {
 	state.Lock()
 	defer state.Unlock()
-	// whether the transaction was started
-	if state.transactionBatch == nil {
-		state.transactionBatch = state.NewTransaction()
-	}
 	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
 
-// TODO: put the transactions into block
 func (state *KatzenmintState) Commit() {
 	state.Lock()
 	defer state.Unlock()
-	// whether the data was changed
-	if state.dirty {
-		_ = state.transactionBatch.Close()
-		state.transactionBatch = nil
-		state.dirty = false
-	}
 	if len(state.deferCommit) > 0 {
 		for _, def := range state.deferCommit {
 			def()
@@ -118,6 +111,8 @@ func (state *KatzenmintState) Commit() {
 		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
+	// TODO: generate document automatically here
+	// TODO: and prune descriptors when putting them into a doc
 }
 
 func (state *KatzenmintState) isAuthorized(addr string) bool {
@@ -154,13 +149,27 @@ func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
 	return false
 }
 
-// NewTransaction
-func (state *KatzenmintState) NewTransaction() dbm.Batch {
-	return state.db.NewBatch()
+func (state *KatzenmintState) Set(key []byte, value []byte) error {
+	state.tree.Set(key, value)
+	return nil
+}
+
+func (state *KatzenmintState) Delete(key []byte) error {
+	_, success := state.tree.Remove(key)
+	if !success {
+		return fmt.Errorf("remove from database failed")
+	}
+	return nil
 }
 
 func (state *KatzenmintState) Get(key []byte) ([]byte, error) {
-	return state.db.Get(key)
+	_, val := state.tree.Get(key)
+	if val == nil {
+		return nil, fmt.Errorf("key '%v' does not exist", key)
+	}
+	ret := make([]byte, len(val))
+	copy(ret, val)
+	return ret, nil
 }
 
 func (state *KatzenmintState) storageKey(keyPrefix []byte, identifier string, version uint64) (key []byte) {
@@ -214,14 +223,10 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
-	if state.transactionBatch == nil {
-		return errTransactionNotCreated
-	}
 	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
-	if err := state.transactionBatch.Set([]byte(key), rawDesc); err != nil {
+	if err := state.Set([]byte(key), rawDesc); err != nil {
 		return err
 	}
-	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
 	state.deferCommit = append(state.deferCommit, func() {
@@ -260,14 +265,10 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	e.SetUint64(epoch)
 
 	// Persist the raw descriptor to disk.
-	if state.transactionBatch == nil {
-		return errTransactionNotCreated
-	}
 	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
-	if err := state.transactionBatch.Set([]byte(key), rawDoc); err != nil {
+	if err := state.Set([]byte(key), rawDoc); err != nil {
 		return err
 	}
-	state.dirty = true
 
 	// Store the raw descriptor and the parsed struct.
 	state.deferCommit = append(state.deferCommit, func() {
@@ -276,6 +277,10 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 		d.raw = rawDoc
 		state.documents[epoch] = d
 	})
+
+	epochBytes := make([]byte, 8)
+	binary.PutUvarint(epochBytes, epoch)
+	state.tree.Set(epochBytes, rawDoc)
 
 	fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
 	return
@@ -299,9 +304,6 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if err != nil {
 		return fmt.Errorf("can't decode public key: %w", err)
 	}
-	if state.transactionBatch == nil {
-		return errTransactionNotCreated
-	}
 	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
@@ -313,10 +315,9 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		if auth != nil {
 			return fmt.Errorf("cannot remove non-existent validator %s", pubkey.Address())
 		}
-		if err = state.transactionBatch.Delete(key); err != nil {
+		if err = state.Delete(key); err != nil {
 			return err
 		}
-		state.dirty = true
 		delete(state.validators, string(pubkey.Address()))
 	} else {
 		// TODO: make sure the voting power not exceed 1/3
@@ -325,13 +326,13 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		if err := abcitypes.WriteMessage(&v, value); err != nil {
 			return fmt.Errorf("error encoding validator: %v", err)
 		}
-		if err = state.transactionBatch.Set(key, value.Bytes()); err != nil {
+		if err = state.Set(key, value.Bytes()); err != nil {
 			return err
 		}
 		state.dirty = true
 		if rawAuth != nil {
 			// save payload into database
-			if err := state.transactionBatch.Set([]byte(key), rawAuth); err != nil {
+			if err := state.Set([]byte(key), rawAuth); err != nil {
 				return err
 			}
 		}

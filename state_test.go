@@ -96,7 +96,6 @@ func TestUpdateDescriptor(t *testing.T) {
 	defer cleanTest(db, testDescriptorDBPath)
 	state := createState(db)
 	state.BeginBlock()
-	state.transactionBatch = state.NewTransaction()
 	err = state.updateMixDescriptor(rawDesc, desc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update mix descriptor: %+v\n", err)

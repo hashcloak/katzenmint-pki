@@ -6,8 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dgraph-io/badger"
+	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
+
 	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
@@ -37,9 +38,9 @@ func TestAddAuthority(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
 	for i, node := range testNodes {
 		if i == 0 {
-			db, err := badger.Open(badger.DefaultOptions(node.DBPath))
+			db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, node.DBPath)
 			if err != nil {
-				t.Fatalf("Failed to open badger db: %v", err)
+				t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
 			}
 			defer func(dbPath string) {
 				db.Close()
@@ -105,8 +106,7 @@ func TestAddAuthority(t *testing.T) {
 			m.App.Commit()
 
 			key := app.state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
-			rtx := app.state.NewTransaction(false)
-			_, err = rtx.Get(key)
+			_, err = app.state.Get(key)
 			if err != nil {
 				t.Fatalf("Failed to get authority from database: %+v\n", err)
 			}

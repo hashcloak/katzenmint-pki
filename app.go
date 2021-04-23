@@ -2,15 +2,17 @@ package katzenmint
 
 import (
 	"crypto/ed25519"
+	"encoding/binary"
+
 	// "crypto/sha256"
 	"fmt"
 
-	"github.com/dgraph-io/badger"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
 	// "github.com/tendermint/tendermint/version"
 	// cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -31,7 +33,7 @@ type KatzenmintApplication struct {
 	// logger log.Logger
 }
 
-func NewKatzenmintApplication(db *badger.DB) *KatzenmintApplication {
+func NewKatzenmintApplication(db dbm.DB) *KatzenmintApplication {
 	state := NewKatzenmintState(db)
 	return &KatzenmintApplication{
 		state: state,
@@ -197,6 +199,7 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Code = 0x1
 		return
 	}
+
 	switch kquery.Command {
 	default:
 		resQuery.Log = "unsupported query"
@@ -207,25 +210,27 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 			fmt.Printf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err)
 			resQuery.Log = "document does not exist"
 			resQuery.Code = 0x3
-		} else {
-			resQuery.Key = rquery.Data
-			resQuery.Value = doc
-			resQuery.Height = int64(app.state.blockHeight)
-			// TODO: provide proof ops
+			return
 		}
+		epochBytes := make([]byte, 8)
+		binary.PutUvarint(epochBytes, kquery.Epoch)
+		resQuery.Key = epochBytes
+		resQuery.Value = doc
+		resQuery.Height = int64(app.state.blockHeight)
+		// TODO: provide proof ops
 	}
 	return
 }
 
 func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	app.state.transactionBatch = app.state.NewTransaction(true)
+	app.state.transactionBatch = app.state.NewTransaction()
 	for _, v := range req.Validators {
 		err := app.state.updateAuthority(nil, v)
 		if err != nil {
 			fmt.Printf("Error updating validators: %+v\n", err)
 		}
 	}
-	_ = app.state.transactionBatch.Commit()
+	_ = app.state.transactionBatch.Close()
 	app.state.transactionBatch = nil
 	return abcitypes.ResponseInitChain{}
 }

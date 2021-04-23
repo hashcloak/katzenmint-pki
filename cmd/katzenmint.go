@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/dgraph-io/badger"
 	katzenmint "github.com/hashcloak/katzenmint-pki"
 	"github.com/spf13/viper"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -20,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	dbm "github.com/tendermint/tm-db"
 )
 
 var (
@@ -87,9 +87,10 @@ func main() {
 	if len(dbPath) == 0 {
 		dbPath = filepath.Join(os.TempDir(), "katzenmint")
 	}
-	db, err := badger.Open(badger.DefaultOptions(dbPath))
+	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, dbPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
+		fmt.Fprintln(os.Stderr, "try running with -tags badgerdb")
 		os.Exit(1)
 	}
 	defer db.Close()

@@ -1,4 +1,5 @@
 GOPATH=$(shell go env GOPATH)
+GOTAGS="badgerdb"
 
 .PHONY: default
 default: lint test
@@ -15,7 +16,7 @@ lint:
 .PHONY: test
 test:
 	go test s11n/*.go 
-	go test command.go query.go authority.go encoding*.go transaction*.go state*.go app*.go
+	go test -tags=$(GOTAGS) command.go query.go authority.go encoding*.go transaction*.go state*.go app*.go
 
 
 .PHONY: setup
@@ -24,4 +25,4 @@ setup:
 
 .PHONY: build
 build:
-	go build -o katzenmint cmd/katzenmint.go
+	go build -tags=$(GOTAGS) -o katzenmint cmd/katzenmint.go

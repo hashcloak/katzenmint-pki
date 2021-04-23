@@ -7,13 +7,15 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/dgraph-io/badger"
+	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
+
 	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+
 	// "github.com/tendermint/tendermint/libs/log"
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
@@ -50,7 +52,7 @@ type KatzenmintState struct {
 	sync.RWMutex
 	blockHeight uint64
 
-	db *badger.DB
+	db dbm.DB
 
 	documents   map[uint64]*document
 	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
@@ -63,7 +65,7 @@ type KatzenmintState struct {
 
 	// whether data was changed
 	dirty            bool
-	transactionBatch *badger.Txn
+	transactionBatch dbm.Batch
 }
 
 func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
@@ -77,7 +79,7 @@ func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 	return string(pubkey.Address())
 }
 
-func NewKatzenmintState(db *badger.DB) *KatzenmintState {
+func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 	// should load the current state from database
 	return &KatzenmintState{
 		db:               db,
@@ -94,7 +96,7 @@ func (state *KatzenmintState) BeginBlock() {
 	defer state.Unlock()
 	// whether the transaction was started
 	if state.transactionBatch == nil {
-		state.transactionBatch = state.NewTransaction(true)
+		state.transactionBatch = state.NewTransaction()
 	}
 	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
@@ -105,7 +107,7 @@ func (state *KatzenmintState) Commit() {
 	defer state.Unlock()
 	// whether the data was changed
 	if state.dirty {
-		_ = state.transactionBatch.Commit()
+		_ = state.transactionBatch.Close()
 		state.transactionBatch = nil
 		state.dirty = false
 	}
@@ -153,8 +155,12 @@ func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
 }
 
 // NewTransaction
-func (state *KatzenmintState) NewTransaction(update bool) *badger.Txn {
-	return state.db.NewTransaction(update)
+func (state *KatzenmintState) NewTransaction() dbm.Batch {
+	return state.db.NewBatch()
+}
+
+func (state *KatzenmintState) Get(key []byte) ([]byte, error) {
+	return state.db.Get(key)
 }
 
 func (state *KatzenmintState) storageKey(keyPrefix []byte, identifier string, version uint64) (key []byte) {
@@ -300,12 +306,12 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 
 	if v.Power == 0 {
 		// remove validator
-		auth, err := state.transactionBatch.Get(key)
+		auth, err := state.Get(key)
 		if err != nil {
 			return err
 		}
 		if auth != nil {
-			return fmt.Errorf("Cannot remove non-existent validator %s", pubkey.Address())
+			return fmt.Errorf("cannot remove non-existent validator %s", pubkey.Address())
 		}
 		if err = state.transactionBatch.Delete(key); err != nil {
 			return err

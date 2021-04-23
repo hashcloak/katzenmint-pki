@@ -6,13 +6,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dgraph-io/badger"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
 
 	// "github.com/stretchr/testify/assert"
@@ -27,13 +27,13 @@ const (
 )
 
 // create test state
-func createState(db *badger.DB) (state *KatzenmintState) {
+func createState(db dbm.DB) (state *KatzenmintState) {
 	state = NewKatzenmintState(db)
 	return
 }
 
 // clean test data
-func cleanTest(db *badger.DB, dbPath string) {
+func cleanTest(db dbm.DB, dbPath string) {
 	db.Close()
 	err := os.RemoveAll(dbPath)
 	if err != nil {
@@ -89,14 +89,14 @@ func TestUpdateDescriptor(t *testing.T) {
 	if err := enc.Encode(desc); err != nil {
 		t.Fatalf("Failed to marshal mix descriptor: %+v\n", err)
 	}
-	db, err := badger.Open(badger.DefaultOptions(testDescriptorDBPath))
+	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testDescriptorDBPath)
 	if err != nil {
-		t.Fatalf("Failed to open badger db: %v\n", err)
+		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
 	}
 	defer cleanTest(db, testDescriptorDBPath)
 	state := createState(db)
 	state.BeginBlock()
-	state.transactionBatch = state.NewTransaction(true)
+	state.transactionBatch = state.NewTransaction()
 	err = state.updateMixDescriptor(rawDesc, desc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
@@ -114,8 +114,7 @@ func TestUpdateDescriptor(t *testing.T) {
 	}
 	// test the data exists in db
 	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), testEpoch)
-	rtx := state.NewTransaction(false)
-	_, err = rtx.Get(key)
+	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get mix descriptor from database: %+v\n", err)
 	}
@@ -170,9 +169,9 @@ func TestUpdateDocument(t *testing.T) {
 	if err := enc.Encode(ddoc); err != nil {
 		t.Fatalf("Failed to marshal pki document: %+v\n", err)
 	}
-	db, err := badger.Open(badger.DefaultOptions(testDocumentDBPath))
+	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testDocumentDBPath)
 	if err != nil {
-		t.Fatalf("Failed to open badger db: %v\n", err)
+		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
 	}
 	defer cleanTest(db, testDocumentDBPath)
 	state := createState(db)
@@ -191,8 +190,7 @@ func TestUpdateDocument(t *testing.T) {
 	e := new(big.Int)
 	e.SetUint64(testEpoch)
 	key := state.storageKey([]byte(documentsBucket), e.String(), testEpoch)
-	rtx := state.NewTransaction(false)
-	_, err = rtx.Get(key)
+	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get pki document from database: %+v\n", err)
 	}
@@ -216,9 +214,9 @@ func TestUpdateAuthority(t *testing.T) {
 	if err := enc.Encode(authority); err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
-	db, err := badger.Open(badger.DefaultOptions(testAuthorityDBPath))
+	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testAuthorityDBPath)
 	if err != nil {
-		t.Fatalf("Failed to open badger db: %v\n", err)
+		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
 	}
 	defer cleanTest(db, testAuthorityDBPath)
 	state := createState(db)
@@ -232,8 +230,7 @@ func TestUpdateAuthority(t *testing.T) {
 	state.Commit()
 
 	key := state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
-	rtx := state.NewTransaction(false)
-	_, err = rtx.Get(key)
+	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get authority from database: %+v\n", err)
 	}

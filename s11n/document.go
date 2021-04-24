@@ -19,10 +19,7 @@ package s11n
 import (
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/katzenpost/core/crypto/cert"
-	"github.com/katzenpost/core/epochtime"
 	"github.com/katzenpost/core/pki"
 	"github.com/ugorji/go/codec"
 )
@@ -64,105 +61,50 @@ type Document struct {
 	Providers [][]byte
 }
 
-// FromPayload deserializes, then verifies a Document, and returns the Document or error.
-func FromPayload(verifier cert.Verifier, payload []byte) (*Document, error) {
-	verified, err := cert.Verify(verifier, payload)
-	if err != nil {
-		return nil, err
-	}
-	dec := codec.NewDecoderBytes(verified, jsonHandle)
-	d := new(Document)
-	if err := dec.Decode(d); err != nil {
-		return nil, err
-	}
-	return d, nil
-}
-
-// SignDocument signs and serializes the document with the provided signing key.
-func SignDocument(signer cert.Signer, d *Document) ([]byte, error) {
-	d.Version = DocumentVersion
-
-	// Serialize the document.
+func SerializeDocument(d *Document) ([]byte, error) {
 	var payload []byte
+
+	d.Version = DocumentVersion
 	enc := codec.NewEncoderBytes(&payload, jsonHandle)
 	if err := enc.Encode(d); err != nil {
 		return nil, err
 	}
-
-	// Sign the document.
-	expiration := time.Now().Add(CertificateExpiration).Unix()
-	return cert.Sign(signer, payload, expiration)
+	return payload, nil
 }
 
-// MultiSignDocument signs and serializes the document with the provided signing key, adding the signature to the existing signatures.
-func MultiSignDocument(signer cert.Signer, peerSignatures []*cert.Signature, verifiers map[string]cert.Verifier, d *Document) ([]byte, error) {
-	d.Version = DocumentVersion
-
-	// Serialize the document.
-	var payload []byte
-	enc := codec.NewEncoderBytes(&payload, jsonHandle)
-	if err := enc.Encode(d); err != nil {
-		return nil, err
-	}
-
-	// Sign the document.
-	expiration := time.Now().Add(3 * epochtime.Period).Unix()
-	signed, err := cert.Sign(signer, payload, expiration)
-	if err != nil {
-		return nil, err
-	}
-
-	// attach peer signatures
-	for _, signature := range peerSignatures {
-		verifier := verifiers[string(signature.Identity)]
-		signed, err = cert.AddSignature(verifier, *signature, signed)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return signed, nil
-}
-
-// VerifyAndParseDocument verifies the signature and deserializes the document.
-func VerifyAndParseDocument(b []byte, verifier cert.Verifier) (*pki.Document, error) {
-	payload, err := cert.Verify(verifier, b)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the payload.
+func VerifyAndParseDocument(payload []byte) (*pki.Document, error) {
 	d := new(Document)
 	dec := codec.NewDecoderBytes(payload, jsonHandle)
-	if err = dec.Decode(d); err != nil {
+	if err := dec.Decode(d); err != nil {
 		return nil, err
 	}
 
 	// Ensure the document is well formed.
 	if d.Version != DocumentVersion {
-		return nil, fmt.Errorf("Invalid Document Version: '%v'", d.Version)
+		return nil, fmt.Errorf("invalid Document Version: '%v'", d.Version)
 	}
 
 	if d.GenesisEpoch == 0 {
-		return nil, fmt.Errorf("Document has invalid GenesisEpoch")
+		return nil, fmt.Errorf("document has invalid GenesisEpoch")
 	}
 
-	doc := new(pki.Document)
-	doc.Epoch = d.Epoch
-	doc.GenesisEpoch = d.GenesisEpoch
-	doc.SendRatePerMinute = d.SendRatePerMinute
-	doc.Mu = d.Mu
-	doc.MuMaxDelay = d.MuMaxDelay
-	doc.LambdaP = d.LambdaP
-	doc.LambdaPMaxDelay = d.LambdaPMaxDelay
-	doc.LambdaL = d.LambdaL
-	doc.LambdaLMaxDelay = d.LambdaLMaxDelay
-	doc.LambdaD = d.LambdaD
-	doc.LambdaDMaxDelay = d.LambdaDMaxDelay
-	doc.LambdaM = d.LambdaM
-	doc.LambdaMMaxDelay = d.LambdaMMaxDelay
-	doc.Topology = make([][]*pki.MixDescriptor, len(d.Topology))
-	doc.Providers = make([]*pki.MixDescriptor, 0, len(d.Providers))
+	doc := &pki.Document{
+		Epoch:             d.Epoch,
+		GenesisEpoch:      d.GenesisEpoch,
+		SendRatePerMinute: d.SendRatePerMinute,
+		Mu:                d.Mu,
+		MuMaxDelay:        d.MuMaxDelay,
+		LambdaP:           d.LambdaP,
+		LambdaPMaxDelay:   d.LambdaPMaxDelay,
+		LambdaL:           d.LambdaL,
+		LambdaLMaxDelay:   d.LambdaLMaxDelay,
+		LambdaD:           d.LambdaD,
+		LambdaDMaxDelay:   d.LambdaDMaxDelay,
+		LambdaM:           d.LambdaM,
+		LambdaMMaxDelay:   d.LambdaDMaxDelay,
+		Topology:          make([][]*pki.MixDescriptor, len(d.Topology)),
+		Providers:         make([]*pki.MixDescriptor, 0, len(d.Providers)),
+	}
 
 	for layer, nodes := range d.Topology {
 		for _, rawDesc := range nodes {
@@ -190,7 +132,7 @@ func VerifyAndParseDocument(b []byte, verifier cert.Verifier) (*pki.Document, er
 		doc.Providers = append(doc.Providers, desc)
 	}
 
-	if err = IsDocumentWellFormed(doc); err != nil {
+	if err := IsDocumentWellFormed(doc); err != nil {
 		return nil, err
 	}
 

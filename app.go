@@ -123,10 +123,9 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) (err error) {
 			return
 		}
 	case AddConsensusDocument:
-		var verifier cert.Verifier
 		payload := []byte(tx.Payload)
 		var doc *pki.Document
-		doc, err = s11n.VerifyAndParseDocument(payload, verifier)
+		doc, err = s11n.VerifyAndParseDocument(payload)
 		if err != nil {
 			return
 		} else if doc.Epoch != tx.Epoch {

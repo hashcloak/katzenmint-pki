@@ -9,17 +9,13 @@ import (
 	"sync"
 
 	"github.com/cosmos/iavl"
-	dbm "github.com/tendermint/tm-db"
-	"github.com/ugorji/go/codec"
-
-	// "github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-
-	// "github.com/tendermint/tendermint/libs/log"
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	dbm "github.com/tendermint/tm-db"
+	"github.com/ugorji/go/codec"
 )
 
 const (
@@ -55,17 +51,12 @@ type KatzenmintState struct {
 
 	tree *iavl.MutableTree
 
-	documents   map[uint64]*document
-	descriptors map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
-
-	// validator set
+	documents        map[uint64]*document
+	descriptors      map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
 	validators       map[string]pc.PublicKey
 	validatorUpdates []abcitypes.ValidatorUpdate
 
 	deferCommit []func()
-
-	// whether data was changed
-	dirty bool
 }
 
 func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
@@ -329,7 +320,6 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		if err = state.Set(key, value.Bytes()); err != nil {
 			return err
 		}
-		state.dirty = true
 		if rawAuth != nil {
 			// save payload into database
 			if err := state.Set([]byte(key), rawAuth); err != nil {

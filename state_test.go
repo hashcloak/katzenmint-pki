@@ -123,10 +123,6 @@ func TestUpdateDocument(t *testing.T) {
 	// assert := assert.New(t)
 	require := require.New(t)
 
-	// Generate a random signing key.
-	k, err := eddsa.NewKeypair(rand.Reader)
-	require.NoError(err, "eddsa.NewKeypair()")
-
 	testSendRate := uint64(3)
 
 	// Generate a Document.
@@ -154,12 +150,12 @@ func TestUpdateDocument(t *testing.T) {
 		idx++
 	}
 
-	// Serialize and sign.
-	signed, err := s11n.SignDocument(k, doc)
-	require.NoError(err, "SignDocument()")
+	// Serialize
+	serialized, err := s11n.SerializeDocument(doc)
+	require.NoError(err, "SerializeDocument()")
 
 	// Validate and deserialize.
-	ddoc, err := s11n.VerifyAndParseDocument([]byte(signed), k.PublicKey())
+	ddoc, err := s11n.VerifyAndParseDocument([]byte(serialized))
 	if err != nil {
 		t.Fatalf("Failed to VerifyAndParseDocument document: %+v\n", err)
 	}

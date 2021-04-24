@@ -68,10 +68,6 @@ func TestDocument(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
 
-	// Generate a random signing key.
-	k, err := eddsa.NewKeypair(rand.Reader)
-	require.NoError(err, "eddsa.NewKeypair()")
-
 	testSendRate := uint64(3)
 
 	// Generate a Document.
@@ -99,12 +95,12 @@ func TestDocument(t *testing.T) {
 		idx++
 	}
 
-	// Serialize and sign.
-	signed, err := SignDocument(k, doc)
-	require.NoError(err, "SignDocument()")
+	// Serialize
+	serialized, err := SerializeDocument(doc)
+	require.NoError(err, "SerializeDocument()")
 
 	// Validate and deserialize.
-	ddoc, err := VerifyAndParseDocument([]byte(signed), k.PublicKey())
+	ddoc, err := VerifyAndParseDocument([]byte(serialized))
 	require.NoError(err, "VerifyAndParseDocument()")
 	require.Equal(doc.Epoch, ddoc.Epoch, "VerifyAndParseDocument(): Epoch")
 	require.Equal(doc.SendRatePerMinute, testSendRate, "VerifyAndParseDocument(): SendRatePerMinute")

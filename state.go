@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cosmos/iavl"
+	katvoting "github.com/katzenpost/authority/voting/server/config"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -25,7 +26,9 @@ const (
 )
 
 var (
-	jsonHandle *codec.JsonHandle
+	defaultLayers           = 3
+	defaultMinNodesPerLayer = 2
+	jsonHandle              *codec.JsonHandle
 )
 
 func init() {
@@ -47,10 +50,15 @@ type document struct {
 
 type KatzenmintState struct {
 	sync.RWMutex
-	blockHeight uint64
+	blockHeight  uint64
+	currentEpoch uint64
+	genesisEpoch uint64
 
 	tree *iavl.MutableTree
 
+	layers           int
+	minNodesPerLayer int
+	parameters       *katvoting.Parameters
 	documents        map[uint64]*document
 	descriptors      map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
 	validators       map[string]pc.PublicKey
@@ -78,6 +86,11 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 	}
 	return &KatzenmintState{
 		tree:             tree,
+		layers:           defaultLayers,
+		minNodesPerLayer: defaultMinNodesPerLayer,
+		currentEpoch:     1,                       // TODO: load
+		genesisEpoch:     1,                       // TODO: load
+		parameters:       &katvoting.Parameters{}, // TODO: load
 		documents:        make(map[uint64]*document),
 		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
 		validatorUpdates: make([]abcitypes.ValidatorUpdate, 1),
@@ -102,8 +115,22 @@ func (state *KatzenmintState) Commit() {
 		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
-	// TODO: generate document automatically here
-	// TODO: and prune descriptors when putting them into a doc
+	if state.newDocumentRequired() {
+		doc, err := state.generateDocument()
+		if err != nil {
+			// no logging yet?! use panic first for debug
+			panic(err)
+		}
+		state.documents[state.currentEpoch] = doc
+		// TODO: make checks and save them
+		// TODO: and prune related descriptors
+		state.currentEpoch++
+	}
+}
+
+func (state *KatzenmintState) newDocumentRequired() bool {
+	// TODO: determine when to finish the current epoch
+	return false
 }
 
 func (state *KatzenmintState) isAuthorized(addr string) bool {

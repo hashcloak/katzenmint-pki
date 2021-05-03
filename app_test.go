@@ -3,8 +3,8 @@ package katzenmint
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/binary"
 	"encoding/json"
-	"math/big"
 	"net/url"
 	"os"
 	"testing"
@@ -110,7 +110,7 @@ func TestAddAuthority(t *testing.T) {
 
 			m.App.Commit()
 
-			key := storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
+			key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
 			_, err = app.state.Get(key)
 			if err != nil {
 				t.Fatalf("Failed to get authority from database: %+v\n", err)
@@ -200,9 +200,9 @@ func TestPostDocument(t *testing.T) {
 	err = codec.NewEncoderBytes(&data, jsonHandle).Encode(query)
 	require.Nil(err)
 
-	e := new(big.Int)
-	e.SetUint64(testEpoch)
-	key := storageKey([]byte(documentsBucket), e.String(), testEpoch)
+	e := make([]byte, 8)
+	binary.PutUvarint(e, testEpoch)
+	key := storageKey(documentsBucket, e, testEpoch)
 	path := "/" + url.PathEscape(string(key))
 
 	rsp, err := m.ABCIQuery(context.Background(), path, data)

@@ -1,8 +1,8 @@
 package katzenmint
 
 import (
+	"encoding/binary"
 	"fmt"
-	"math/big"
 	"testing"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
@@ -99,7 +99,7 @@ func TestUpdateDescriptor(t *testing.T) {
 		}
 	}
 	// test the data exists in db
-	key := storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), testEpoch)
+	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), testEpoch)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get mix descriptor from database: %+v\n", err)
@@ -166,9 +166,9 @@ func TestUpdateDocument(t *testing.T) {
 		t.Fatal("Failed to update pki document\n")
 	}
 	// test the data exists in db
-	e := new(big.Int)
-	e.SetUint64(testEpoch)
-	key := storageKey([]byte(documentsBucket), e.String(), testEpoch)
+	e := make([]byte, 8)
+	binary.PutUvarint(e, testEpoch)
+	key := storageKey(documentsBucket, e, testEpoch)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get pki document from database: %+v\n", err)
@@ -205,7 +205,7 @@ func TestUpdateAuthority(t *testing.T) {
 	}
 	_ = state.Commit()
 
-	key := storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
+	key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get authority from database: %+v\n", err)

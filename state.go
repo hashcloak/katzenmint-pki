@@ -2,8 +2,8 @@ package katzenmint
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
-	"math/big"
 	"sync"
 
 	"github.com/cosmos/iavl"
@@ -12,30 +12,14 @@ import (
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/crypto/merkle"
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
-	"github.com/ugorji/go/codec"
-)
-
-const (
-	descriptorsBucket = "k_descriptors"
-	documentsBucket   = "k_documents"
-	authoritiesBucket = "k_authorities"
 )
 
 var (
 	defaultLayers           = 3
 	defaultMinNodesPerLayer = 2
-	jsonHandle              *codec.JsonHandle
 )
-
-func init() {
-	jsonHandle = new(codec.JsonHandle)
-	jsonHandle.Canonical = true
-	jsonHandle.IntegerAsString = 'A'
-	jsonHandle.MapKeyAsString = true
-}
 
 type descriptor struct {
 	desc *pki.MixDescriptor
@@ -65,17 +49,6 @@ type KatzenmintState struct {
 	validatorUpdates []abcitypes.ValidatorUpdate
 
 	deferCommit []func()
-}
-
-func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
-	p := make([]byte, eddsa.PublicKeySize)
-	copy(p, pk[:])
-	v := abcitypes.UpdateValidator(p, 0, "")
-	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
-	if err != nil {
-		return ""
-	}
-	return string(pubkey.Address())
 }
 
 func NewKatzenmintState(db dbm.DB) *KatzenmintState {
@@ -198,16 +171,6 @@ func (state *KatzenmintState) Get(key []byte) ([]byte, error) {
 	return ret, nil
 }
 
-func storageKey(keyPrefix []byte, identifier string, version uint64) (key []byte) {
-	key = make([]byte, len(keyPrefix)+len(identifier)+8)
-	copy(key, keyPrefix)
-	copy(key[len(keyPrefix):], []byte(identifier))
-	verInt := new(big.Int)
-	verInt.SetUint64(version)
-	copy(key[len(keyPrefix)+len(identifier):], verInt.Bytes())
-	return
-}
-
 func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixDescriptor, epoch uint64) (err error) {
 	state.Lock()
 	defer state.Unlock()
@@ -249,8 +212,8 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
-	key := storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
-	if err := state.Set([]byte(key), rawDesc); err != nil {
+	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), epoch)
+	if err := state.Set(key, rawDesc); err != nil {
 		return err
 	}
 
@@ -289,12 +252,12 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 		return nil
 	}
 
-	e := new(big.Int)
-	e.SetUint64(epoch)
+	e := make([]byte, 8)
+	binary.PutUvarint(e, epoch)
 
 	// Persist the raw descriptor to disk.
-	key := storageKey([]byte(documentsBucket), e.String(), epoch)
-	if err := state.Set([]byte(key), rawDoc); err != nil {
+	key := storageKey(documentsBucket, e, epoch)
+	if err := state.Set(key, rawDoc); err != nil {
 		return err
 	}
 
@@ -312,25 +275,15 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	return
 }
 
-func (state *KatzenmintState) VerifyAndParseAuthority(payload []byte) (*Authority, error) {
-	authority := new(Authority)
-	dec := codec.NewDecoderBytes(payload, jsonHandle)
-	if err := dec.Decode(authority); err != nil {
-		return nil, err
-	}
-	// TODO: check authority
-	if _, ok := state.validators[bytesToAddress(authority.IdentityKey.ByteArray())]; ok {
-		return nil, fmt.Errorf("authority had been added")
-	}
-	return authority, nil
-}
-
 func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.ValidatorUpdate) error {
 	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
 	if err != nil {
 		return fmt.Errorf("can't decode public key: %w", err)
 	}
-	key := storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
+	if _, ok := state.validators[string(pubkey.Address())]; ok {
+		return fmt.Errorf("authority had been added")
+	}
+	key := storageKey(authoritiesBucket, pubkey.Bytes(), 0)
 
 	if v.Power == 0 {
 		// remove validator
@@ -367,25 +320,4 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	state.validatorUpdates = append(state.validatorUpdates, v)
 
 	return nil
-}
-
-func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.ProofOperator, error) {
-	// TODO: postpone the document for some blocks?
-	// var postponDeadline = 10
-
-	state.RLock()
-	defer state.RUnlock()
-
-	e := new(big.Int)
-	e.SetUint64(epoch)
-	key := storageKey([]byte(documentsBucket), e.String(), epoch)
-	doc, proof, err := state.tree.GetWithProof(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	if doc == nil {
-		return nil, nil, fmt.Errorf("doc for epoch %d not found", epoch)
-	}
-	valueOp := iavl.NewValueOp(key, proof)
-	return doc, valueOp, nil
 }

@@ -147,7 +147,7 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) (err error) {
 		var authority *Authority
 		// pk := tx.PublicKeyBytesArray()
 		payload := []byte(tx.Payload)
-		authority, err = app.state.VerifyAndParseAuthority(payload)
+		authority, err = VerifyAndParseAuthority(payload)
 		if err != nil {
 			fmt.Printf("failed to parse authority: %+v\n", err)
 			return

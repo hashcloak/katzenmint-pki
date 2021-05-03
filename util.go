@@ -4,13 +4,58 @@
 package katzenmint
 
 import (
+	"encoding/binary"
 	"fmt"
 
+	"github.com/cosmos/iavl"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/core/sphinx/constants"
+	"github.com/tendermint/tendermint/crypto/merkle"
 )
+
+const (
+	descriptorsBucket = "k_descriptors"
+	documentsBucket   = "k_documents"
+	authoritiesBucket = "k_authorities"
+)
+
+func storageKey(keyPrefix string, keyID []byte, version uint64) (key []byte) {
+	verHex := make([]byte, 8)
+	binary.PutUvarint(verHex, version)
+	verHex = []byte(EncodeHex(verHex))
+	IDHex := []byte(EncodeHex(keyID))
+
+	key = make([]byte, len(keyPrefix))
+	copy(key, keyPrefix)
+	key = append(key[:], ':')
+	key = append(key[:], verHex[:]...)
+	key = append(key[:], ':')
+	key = append(key[:], IDHex[:]...)
+	return
+}
+
+func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.ProofOperator, error) {
+	// TODO: postpone the document for some blocks?
+	// var postponDeadline = 10
+
+	state.RLock()
+	defer state.RUnlock()
+
+	e := make([]byte, 8)
+	binary.PutUvarint(e, epoch)
+	key := storageKey(documentsBucket, e, epoch)
+	doc, proof, err := state.tree.GetWithProof(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	if doc == nil {
+		return nil, nil, fmt.Errorf("doc for epoch %d not found", epoch)
+	}
+	valueOp := iavl.NewValueOp(key, proof)
+	return doc, valueOp, nil
+}
 
 func (s *KatzenmintState) generateDocument() (*document, error) {
 	s.Lock()

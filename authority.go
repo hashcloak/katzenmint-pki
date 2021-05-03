@@ -23,15 +23,6 @@ type Authority struct {
 	Power int64
 }
 
-var jsonHandle *codec.JsonHandle
-
-func init() {
-	jsonHandle = new(codec.JsonHandle)
-	jsonHandle.Canonical = true
-	jsonHandle.IntegerAsString = 'A'
-	jsonHandle.MapKeyAsString = true
-}
-
 func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 	p := make([]byte, eddsa.PublicKeySize)
 	copy(p, pk[:])

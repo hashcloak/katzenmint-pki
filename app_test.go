@@ -200,20 +200,21 @@ func TestPostDocument(t *testing.T) {
 	err = codec.NewEncoderBytes(&data, jsonHandle).Encode(query)
 	require.Nil(err)
 
+	rsp, err := m.ABCIQuery(context.Background(), "", data)
+	require.Nil(err)
+	require.True(rsp.Response.IsOK(), rsp.Response.Log)
+	require.Equal(sDoc, rsp.Response.Value, "App responses with an erroneous pki document")
+
+	// prepare verification metadata
+	appinfo, err := m.ABCIInfo(context.Background())
+	require.Nil(err)
+	apphash := appinfo.Response.LastBlockAppHash
 	e := make([]byte, 8)
 	binary.PutUvarint(e, testEpoch)
 	key := storageKey(documentsBucket, e, testEpoch)
 	path := "/" + url.PathEscape(string(key))
 
-	rsp, err := m.ABCIQuery(context.Background(), path, data)
-	require.Nil(err)
-	require.True(rsp.Response.IsOK(), rsp.Response.Log)
-	require.Equal(sDoc, rsp.Response.Value, "App responses with an erroneous pki document")
-
 	// verify query proof
-	appinfo, err := m.ABCIInfo(context.Background())
-	require.Nil(err)
-	apphash := appinfo.Response.LastBlockAppHash
 	verifier := merkle.NewProofRuntime()
 	verifier.RegisterOpDecoder(iavl.ProofOpIAVLValue, iavl.ValueOpDecoder)
 	err = verifier.VerifyValue(rsp.Response.ProofOps, apphash, path, rsp.Response.Value)

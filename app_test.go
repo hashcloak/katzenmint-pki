@@ -10,10 +10,8 @@ import (
 	"testing"
 
 	"github.com/cosmos/iavl"
-	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
-	"github.com/katzenpost/core/pki"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -125,35 +123,8 @@ func TestAddAuthority(t *testing.T) {
 func TestPostDocument(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
 
-	// Generate a Document.
-	doc := &s11n.Document{
-		Epoch:             testEpoch,
-		GenesisEpoch:      testEpoch,
-		SendRatePerMinute: uint64(3),
-		Topology:          make([][][]byte, 3),
-		Mu:                0.42,
-		MuMaxDelay:        23,
-		LambdaP:           0.69,
-		LambdaPMaxDelay:   17,
-	}
-	idx := 1
-	for l := 0; l < 3; l++ {
-		for i := 0; i < 5; i++ {
-			_, rawDesc := createDescriptor(require, idx, 0)
-			doc.Topology[l] = append(doc.Topology[l], rawDesc)
-			idx++
-		}
-	}
-	for i := 0; i < 3; i++ {
-		_, rawDesc := createDescriptor(require, idx, pki.LayerProvider)
-		doc.Providers = append(doc.Providers, rawDesc)
-		idx++
-	}
-
-	// Serialize document
-	sDoc, err := s11n.SerializeDocument(doc)
-	require.NoError(err, "SerializeDocument()")
-
+	// Create transaction
+	_, sDoc := CreateTestDocument(require)
 	rawTx := Transaction{
 		Version: ProtocolVersion,
 		Epoch:   testEpoch,

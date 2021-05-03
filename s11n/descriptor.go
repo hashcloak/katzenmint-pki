@@ -220,8 +220,7 @@ func IsDescriptorWellFormed(d *pki.MixDescriptor, epoch uint64) error {
 		if err := validateKaetzchen(d.Kaetzchen); err != nil {
 			return fmt.Errorf("Descriptor contains invalid Kaetzchen block: %v", err)
 		}
-	default:
-		return fmt.Errorf("Descriptor self-assigned Layer: '%v'", d.Layer)
+	default: // it's ok
 	}
 	return nil
 }

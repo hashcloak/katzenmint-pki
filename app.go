@@ -2,7 +2,6 @@ package katzenmint
 
 import (
 	"crypto/ed25519"
-	"encoding/binary"
 
 	// "crypto/sha256"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
 	// "github.com/tendermint/tendermint/version"
@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	ProtocolVersion uint64 = 0x0
+	ProtocolVersion string = "v0.0.1"
 )
 
 var (
@@ -45,8 +45,8 @@ func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.Resp
 		// Data:             fmt.Sprintf("{\"blockHeight\":%v}", app.state.blockHeight),
 		// Version:          version.ABCIVersion,
 		// AppVersion:       ProtocolVersion,
-		// LastBlockHeight:  int64(app.state.blockHeight),
-		// LastBlockAppHash: make([]byte, 8),
+		LastBlockHeight:  app.state.blockHeight,
+		LastBlockAppHash: app.state.appHash,
 	}
 }
 
@@ -183,8 +183,8 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 
 // TODO: should update the validators map after commit
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	app.state.Commit()
-	return abcitypes.ResponseCommit{Data: []byte{}}
+	appHash := app.state.Commit()
+	return abcitypes.ResponseCommit{Data: appHash}
 }
 
 // Note, no proof is included here
@@ -204,19 +204,19 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Log = "unsupported query"
 		resQuery.Code = 0x2
 	case GetConsensus:
-		doc, err := app.state.documentForEpoch(kquery.Epoch)
+		doc, proof, err := app.state.documentForEpoch(kquery.Epoch)
 		if err != nil {
 			fmt.Printf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err)
 			resQuery.Log = "document does not exist"
 			resQuery.Code = 0x3
 			return
 		}
-		epochBytes := make([]byte, 8)
-		binary.PutUvarint(epochBytes, kquery.Epoch)
-		resQuery.Key = epochBytes
+		resQuery.Key = proof.GetKey()
 		resQuery.Value = doc
 		resQuery.Height = int64(app.state.blockHeight)
-		// TODO: provide proof ops
+		resQuery.ProofOps = &tmcrypto.ProofOps{
+			Ops: []tmcrypto.ProofOp{proof.ProofOp()},
+		}
 	}
 	return
 }

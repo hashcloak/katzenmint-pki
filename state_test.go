@@ -3,7 +3,6 @@ package katzenmint
 import (
 	"fmt"
 	"math/big"
-	"os"
 	"testing"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
@@ -30,15 +29,6 @@ const (
 func createState(db dbm.DB) (state *KatzenmintState) {
 	state = NewKatzenmintState(db)
 	return
-}
-
-// clean test data
-func cleanTest(db dbm.DB, dbPath string) {
-	db.Close()
-	err := os.RemoveAll(dbPath)
-	if err != nil {
-		fmt.Println(err)
-	}
 }
 
 // create test descriptor
@@ -89,18 +79,15 @@ func TestUpdateDescriptor(t *testing.T) {
 	if err := enc.Encode(desc); err != nil {
 		t.Fatalf("Failed to marshal mix descriptor: %+v\n", err)
 	}
-	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testDescriptorDBPath)
-	if err != nil {
-		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
-	}
-	defer cleanTest(db, testDescriptorDBPath)
+	db := dbm.NewMemDB()
+	defer db.Close()
 	state := createState(db)
 	state.BeginBlock()
-	err = state.updateMixDescriptor(rawDesc, desc, testEpoch)
+	err := state.updateMixDescriptor(rawDesc, desc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
 	}
-	state.Commit()
+	_ = state.Commit()
 
 	pk := desc.IdentityKey.ByteArray()
 	if m, ok := state.descriptors[testEpoch]; !ok {
@@ -112,7 +99,7 @@ func TestUpdateDescriptor(t *testing.T) {
 		}
 	}
 	// test the data exists in db
-	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), testEpoch)
+	key := storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), testEpoch)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get mix descriptor from database: %+v\n", err)
@@ -164,11 +151,8 @@ func TestUpdateDocument(t *testing.T) {
 	if err := enc.Encode(ddoc); err != nil {
 		t.Fatalf("Failed to marshal pki document: %+v\n", err)
 	}
-	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testDocumentDBPath)
-	if err != nil {
-		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
-	}
-	defer cleanTest(db, testDocumentDBPath)
+	db := dbm.NewMemDB()
+	defer db.Close()
 	state := createState(db)
 
 	state.BeginBlock()
@@ -176,7 +160,7 @@ func TestUpdateDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to update pki document: %+v\n", err)
 	}
-	state.Commit()
+	_ = state.Commit()
 
 	if _, ok := state.documents[testEpoch]; !ok {
 		t.Fatal("Failed to update pki document\n")
@@ -184,7 +168,7 @@ func TestUpdateDocument(t *testing.T) {
 	// test the data exists in db
 	e := new(big.Int)
 	e.SetUint64(testEpoch)
-	key := state.storageKey([]byte(documentsBucket), e.String(), testEpoch)
+	key := storageKey([]byte(documentsBucket), e.String(), testEpoch)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get pki document from database: %+v\n", err)
@@ -209,11 +193,8 @@ func TestUpdateAuthority(t *testing.T) {
 	if err := enc.Encode(authority); err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
-	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, testAuthorityDBPath)
-	if err != nil {
-		t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
-	}
-	defer cleanTest(db, testAuthorityDBPath)
+	db := dbm.NewMemDB()
+	defer db.Close()
 	state := createState(db)
 
 	state.BeginBlock()
@@ -222,9 +203,9 @@ func TestUpdateAuthority(t *testing.T) {
 		fmt.Printf("Failed to update authority: %+v\n", err)
 		return
 	}
-	state.Commit()
+	_ = state.Commit()
 
-	key := state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
+	key := storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get authority from database: %+v\n", err)

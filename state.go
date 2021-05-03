@@ -2,8 +2,6 @@ package katzenmint
 
 import (
 	"bytes"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"sync"
@@ -14,6 +12,7 @@ import (
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/crypto/merkle"
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
@@ -50,7 +49,8 @@ type document struct {
 
 type KatzenmintState struct {
 	sync.RWMutex
-	blockHeight  uint64
+	appHash      []byte
+	blockHeight  int64
 	currentEpoch uint64
 	genesisEpoch uint64
 
@@ -85,6 +85,7 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 		panic(fmt.Errorf("error creating iavl tree"))
 	}
 	return &KatzenmintState{
+		appHash:          make([]byte, 0), // TODO: load
 		tree:             tree,
 		layers:           defaultLayers,
 		minNodesPerLayer: defaultMinNodesPerLayer,
@@ -105,7 +106,7 @@ func (state *KatzenmintState) BeginBlock() {
 	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
 
-func (state *KatzenmintState) Commit() {
+func (state *KatzenmintState) Commit() []byte {
 	state.Lock()
 	defer state.Unlock()
 	if len(state.deferCommit) > 0 {
@@ -126,6 +127,13 @@ func (state *KatzenmintState) Commit() {
 		// TODO: and prune related descriptors
 		state.currentEpoch++
 	}
+	appHash, _, err := state.tree.SaveVersion()
+	if err != nil {
+		// no logging yet?! use panic first for debug
+		panic(err)
+	}
+	state.appHash = appHash
+	return appHash
 }
 
 func (state *KatzenmintState) newDocumentRequired() bool {
@@ -162,9 +170,9 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 
 func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
 	if _, ok := state.documents[doc.Epoch]; ok {
-		return false
+		return true
 	}
-	return false
+	return true
 }
 
 func (state *KatzenmintState) Set(key []byte, value []byte) error {
@@ -190,7 +198,7 @@ func (state *KatzenmintState) Get(key []byte) ([]byte, error) {
 	return ret, nil
 }
 
-func (state *KatzenmintState) storageKey(keyPrefix []byte, identifier string, version uint64) (key []byte) {
+func storageKey(keyPrefix []byte, identifier string, version uint64) (key []byte) {
 	key = make([]byte, len(keyPrefix)+len(identifier)+8)
 	copy(key, keyPrefix)
 	copy(key[len(keyPrefix):], []byte(identifier))
@@ -207,7 +215,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	// Note: Caller ensures that the epoch is the current epoch +- 1.
 	pk := desc.IdentityKey.ByteArray()
 
-	if epoch < state.blockHeight {
+	if (int64)(epoch) < state.blockHeight {
 		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
 	}
 
@@ -241,7 +249,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
-	key := state.storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
+	key := storageKey([]byte(descriptorsBucket), desc.IdentityKey.String(), epoch)
 	if err := state.Set([]byte(key), rawDesc); err != nil {
 		return err
 	}
@@ -254,8 +262,10 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 		m[pk] = d
 	})
 
-	id := hex.EncodeToString(desc.IdentityKey.Bytes())
-	fmt.Printf("Node %s: Successfully submitted descriptor for epoch %v.", id, epoch)
+	/*
+		id := hex.EncodeToString(desc.IdentityKey.Bytes())
+		fmt.Printf("Node %s: Successfully submitted descriptor for epoch %v.", id, epoch)
+	*/
 	return
 }
 
@@ -265,7 +275,7 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 
 	// Note: Caller ensures that the epoch is the current epoch +- 1.
 	// pk := doc.IdentityKey.ByteArray()
-	if epoch < state.blockHeight {
+	if (int64)(epoch) < state.blockHeight {
 		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
 	}
 
@@ -283,7 +293,7 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	e.SetUint64(epoch)
 
 	// Persist the raw descriptor to disk.
-	key := state.storageKey([]byte(documentsBucket), e.String(), epoch)
+	key := storageKey([]byte(documentsBucket), e.String(), epoch)
 	if err := state.Set([]byte(key), rawDoc); err != nil {
 		return err
 	}
@@ -296,11 +306,9 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 		state.documents[epoch] = d
 	})
 
-	epochBytes := make([]byte, 8)
-	binary.PutUvarint(epochBytes, epoch)
-	state.tree.Set(epochBytes, rawDoc)
-
-	fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
+	/*
+		fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
+	*/
 	return
 }
 
@@ -322,7 +330,7 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if err != nil {
 		return fmt.Errorf("can't decode public key: %w", err)
 	}
-	key := state.storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
+	key := storageKey([]byte(authoritiesBucket), string(pubkey.Bytes()), 0)
 
 	if v.Power == 0 {
 		// remove validator
@@ -361,21 +369,23 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	return nil
 }
 
-func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, error) {
+func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.ProofOperator, error) {
 	// TODO: postpone the document for some blocks?
 	// var postponDeadline = 10
 
 	state.RLock()
 	defer state.RUnlock()
 
-	// If we have a serialized document, return it.
-	if d, ok := state.documents[epoch]; ok {
-		if d.raw != nil {
-			return d.raw, nil
-		}
-		return nil, fmt.Errorf("nil document for epoch %d", epoch)
+	e := new(big.Int)
+	e.SetUint64(epoch)
+	key := storageKey([]byte(documentsBucket), e.String(), epoch)
+	doc, proof, err := state.tree.GetWithProof(key)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	// NOTREACHED
-	return nil, nil
+	if doc == nil {
+		return nil, nil, fmt.Errorf("doc for epoch %d not found", epoch)
+	}
+	valueOp := iavl.NewValueOp(key, proof)
+	return doc, valueOp, nil
 }

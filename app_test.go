@@ -123,7 +123,7 @@ func TestPostDocument(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
 
 	// Create transaction
-	_, sDoc := CreateTestDocument(require)
+	_, sDoc := CreateTestDocument(require, testEpoch)
 	rawTx := Transaction{
 		Version: ProtocolVersion,
 		Epoch:   testEpoch,

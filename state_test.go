@@ -20,7 +20,7 @@ import (
 
 func TestUpdateDescriptor(t *testing.T) {
 	require := require.New(t)
-	desc, _ := CreateTestDescriptor(require, 1, pki.LayerProvider)
+	desc, _ := CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
 	rawDesc := make([]byte, 10)
 	enc := codec.NewEncoderBytes(&rawDesc, jsonHandle)
 	if err := enc.Encode(desc); err != nil {
@@ -58,7 +58,7 @@ func TestUpdateDocument(t *testing.T) {
 	require := require.New(t)
 
 	// Create, validate and deserialize document.
-	_, sDoc := CreateTestDocument(require)
+	_, sDoc := CreateTestDocument(require, testEpoch)
 	dDoc, err := s11n.VerifyAndParseDocument([]byte(sDoc))
 	if err != nil {
 		t.Fatalf("Failed to VerifyAndParseDocument document: %+v\n", err)

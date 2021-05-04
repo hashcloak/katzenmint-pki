@@ -16,7 +16,7 @@ const (
 )
 
 // create test descriptor
-func CreateTestDescriptor(require *require.Assertions, idx int, layer int) (*pki.MixDescriptor, []byte) {
+func CreateTestDescriptor(require *require.Assertions, idx int, layer int, epoch uint64) (*pki.MixDescriptor, []byte) {
 	desc := new(pki.MixDescriptor)
 	desc.Name = fmt.Sprintf("katzenmint%d.example.net", idx)
 	desc.Addresses = map[pki.Transport][]string{
@@ -34,7 +34,7 @@ func CreateTestDescriptor(require *require.Assertions, idx int, layer int) (*pki
 	require.NoError(err, "ecdh.NewKeypair()")
 	desc.LinkKey = linkPriv.PublicKey()
 	desc.MixKeys = make(map[uint64]*ecdh.PublicKey)
-	for e := testEpoch; e < testEpoch+3; e++ {
+	for e := epoch; e < epoch+3; e++ {
 		mPriv, err := ecdh.NewKeypair(rand.Reader)
 		require.NoError(err, "[%d]: ecdh.NewKeypair()", e)
 		desc.MixKeys[uint64(e)] = mPriv.PublicKey()
@@ -46,7 +46,7 @@ func CreateTestDescriptor(require *require.Assertions, idx int, layer int) (*pki
 			"miauCount": idx,
 		}
 	}
-	err = s11n.IsDescriptorWellFormed(desc, testEpoch)
+	err = s11n.IsDescriptorWellFormed(desc, epoch)
 	require.NoError(err, "IsDescriptorWellFormed(good)")
 
 	// Sign the descriptor.
@@ -56,10 +56,10 @@ func CreateTestDescriptor(require *require.Assertions, idx int, layer int) (*pki
 }
 
 // create test document
-func CreateTestDocument(require *require.Assertions) (*s11n.Document, []byte) {
+func CreateTestDocument(require *require.Assertions, epoch uint64) (*s11n.Document, []byte) {
 	doc := &s11n.Document{
-		Epoch:             testEpoch,
-		GenesisEpoch:      testEpoch,
+		Epoch:             epoch,
+		GenesisEpoch:      1,
 		SendRatePerMinute: 3,
 		Topology:          make([][][]byte, 3),
 		Mu:                0.42,
@@ -70,13 +70,13 @@ func CreateTestDocument(require *require.Assertions) (*s11n.Document, []byte) {
 	idx := 1
 	for l := 0; l < 3; l++ {
 		for i := 0; i < 5; i++ {
-			_, rawDesc := CreateTestDescriptor(require, idx, 0)
+			_, rawDesc := CreateTestDescriptor(require, idx, 0, epoch)
 			doc.Topology[l] = append(doc.Topology[l], rawDesc)
 			idx++
 		}
 	}
 	for i := 0; i < 3; i++ {
-		_, rawDesc := CreateTestDescriptor(require, idx, pki.LayerProvider)
+		_, rawDesc := CreateTestDescriptor(require, idx, pki.LayerProvider, epoch)
 		doc.Providers = append(doc.Providers, rawDesc)
 		idx++
 	}

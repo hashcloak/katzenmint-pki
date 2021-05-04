@@ -5,8 +5,8 @@ go 1.15
 require (
 	github.com/cosmos/iavl v0.15.3
 	github.com/google/go-cmp v0.5.4 // indirect
-	github.com/katzenpost/authority v0.0.15
-	github.com/katzenpost/core v0.0.14
+	github.com/katzenpost/authority v0.0.14
+	github.com/katzenpost/core v0.0.12
 	github.com/kr/text v0.2.0 // indirect
 	github.com/onsi/ginkgo v1.14.2 // indirect
 	github.com/onsi/gomega v1.10.4 // indirect

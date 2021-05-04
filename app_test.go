@@ -17,7 +17,6 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/rpc/client/mock"
-	types "github.com/tendermint/tendermint/types"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
 )
@@ -100,7 +99,7 @@ func TestAddAuthority(t *testing.T) {
 			}
 
 			m.App.BeginBlock(abcitypes.RequestBeginBlock{})
-			res, err := m.BroadcastTxCommit(context.Background(), types.Tx(encTx))
+			res, err := m.BroadcastTxCommit(context.Background(), encTx)
 			require.Nil(err)
 			assert.True(res.CheckTx.IsOK())
 			require.NotNil(res.DeliverTx)
@@ -147,7 +146,7 @@ func TestPostDocument(t *testing.T) {
 
 	// run app
 	m.App.BeginBlock(abcitypes.RequestBeginBlock{})
-	res, err := m.BroadcastTxCommit(context.Background(), types.Tx(tx))
+	res, err := m.BroadcastTxCommit(context.Background(), tx)
 	require.Nil(err)
 	assert.True(res.CheckTx.IsOK())
 	require.NotNil(res.DeliverTx)

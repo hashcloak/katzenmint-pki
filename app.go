@@ -165,14 +165,14 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) (err error) {
 
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
 	code, tx := app.isTxValid(req.Tx)
-	if code != 0 {
+	if code != abcitypes.CodeTypeOK {
 		return abcitypes.ResponseDeliverTx{Code: code}
 	}
 	err := app.executeTx(tx)
 	if err != nil {
-		code = 2
+		return abcitypes.ResponseDeliverTx{Code: 0xFF, Log: err.Error()}
 	}
-	return abcitypes.ResponseDeliverTx{Code: code}
+	return abcitypes.ResponseDeliverTx{Code: abcitypes.CodeTypeOK}
 }
 
 // TODO: gas formula

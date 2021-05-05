@@ -11,10 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testEpoch = 1
-)
-
 // create test descriptor
 func CreateTestDescriptor(require *require.Assertions, idx int, layer int, epoch uint64) (*pki.MixDescriptor, []byte) {
 	desc := new(pki.MixDescriptor)

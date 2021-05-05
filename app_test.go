@@ -1,6 +1,7 @@
 package katzenmint
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/binary"
@@ -55,9 +56,8 @@ func TestAddAuthority(t *testing.T) {
 			}
 
 			// get some info
-			info, err := m.ABCIInfo(context.Background())
+			_, err = m.ABCIInfo(context.Background())
 			require.Nil(err)
-			assert.Equal(``, info.Response.GetData())
 
 			// create authority
 			authority := new(Authority)
@@ -122,11 +122,26 @@ func TestAddAuthority(t *testing.T) {
 func TestPostDocument(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
 
+	// setup application
+	db := dbm.NewMemDB()
+	defer db.Close()
+	app := NewKatzenmintApplication(db)
+	m := mock.ABCIApp{
+		App: app,
+	}
+
+	// fetch current epoch
+	appinfo, err := m.ABCIInfo(context.Background())
+	require.Nil(err)
+	epochBytes := DecodeHex(appinfo.Response.Data)
+	epoch, err := binary.ReadUvarint(bytes.NewReader(epochBytes))
+	require.Nil(err)
+
 	// Create transaction
-	_, sDoc := CreateTestDocument(require, testEpoch)
+	_, sDoc := CreateTestDocument(require, epoch)
 	rawTx := Transaction{
 		Version: ProtocolVersion,
-		Epoch:   testEpoch,
+		Epoch:   epoch,
 		Command: AddConsensusDocument,
 		Payload: string(sDoc),
 	}
@@ -135,14 +150,6 @@ func TestPostDocument(t *testing.T) {
 	rawTx.AppendSignature(privKey)
 	tx, err := json.Marshal(rawTx)
 	require.NoError(err, "Marshal raw transaction")
-
-	// setup application
-	db := dbm.NewMemDB()
-	defer db.Close()
-	app := NewKatzenmintApplication(db)
-	m := mock.ABCIApp{
-		App: app,
-	}
 
 	// run app
 	m.App.BeginBlock(abcitypes.RequestBeginBlock{})
@@ -154,7 +161,7 @@ func TestPostDocument(t *testing.T) {
 	m.App.Commit()
 
 	// test the data exists in state
-	loaded, _, err := app.state.documentForEpoch(testEpoch)
+	loaded, _, err := app.state.documentForEpoch(epoch)
 	require.Nil(err, "Failed to get pki document from state: %+v\n", err)
 	require.NotNil(loaded, "Failed to get pki document from state: wrong key")
 	require.Equal(sDoc, loaded, "App state contains an erroneous pki document")
@@ -163,7 +170,7 @@ func TestPostDocument(t *testing.T) {
 	var data []byte
 	query := Query{
 		Version: ProtocolVersion,
-		Epoch:   testEpoch,
+		Epoch:   epoch,
 		Command: GetConsensus,
 		Payload: "",
 	}
@@ -176,12 +183,12 @@ func TestPostDocument(t *testing.T) {
 	require.Equal(sDoc, rsp.Response.Value, "App responses with an erroneous pki document")
 
 	// prepare verification metadata
-	appinfo, err := m.ABCIInfo(context.Background())
+	appinfo, err = m.ABCIInfo(context.Background())
 	require.Nil(err)
 	apphash := appinfo.Response.LastBlockAppHash
 	e := make([]byte, 8)
-	binary.PutUvarint(e, testEpoch)
-	key := storageKey(documentsBucket, e, testEpoch)
+	binary.PutUvarint(e, epoch)
+	key := storageKey(documentsBucket, e, epoch)
 	path := "/" + url.PathEscape(string(key))
 
 	// verify query proof

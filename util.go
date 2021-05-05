@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/iavl"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/rand"
+	"github.com/katzenpost/core/epochtime"
 	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/core/sphinx/constants"
 	"github.com/tendermint/tendermint/crypto/merkle"
@@ -51,7 +52,15 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.Pro
 		return nil, nil, err
 	}
 	if doc == nil {
-		return nil, nil, fmt.Errorf("doc for epoch %d not found", epoch)
+		// TODO: replace how we get `now`
+		now, _, _ := epochtime.Now()
+		if epoch <= now {
+			return nil, nil, fmt.Errorf("document for epoch %d was not generated and will never exist", epoch)
+		}
+		if epoch > now+1 {
+			return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
+		}
+		return nil, nil, fmt.Errorf("document for epoch %d is not ready yet", epoch)
 	}
 	valueOp := iavl.NewValueOp(key, proof)
 	return doc, valueOp, nil

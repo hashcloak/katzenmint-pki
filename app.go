@@ -2,14 +2,13 @@ package katzenmint
 
 import (
 	"crypto/ed25519"
+	"encoding/binary"
 
 	// "crypto/sha256"
 	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
-	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
-	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
@@ -41,8 +40,10 @@ func NewKatzenmintApplication(db dbm.DB) *KatzenmintApplication {
 }
 
 func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+	epoch := make([]byte, 8)
+	binary.PutUvarint(epoch, app.state.currentEpoch)
 	return abcitypes.ResponseInfo{
-		// Data:             fmt.Sprintf("{\"blockHeight\":%v}", app.state.blockHeight),
+		Data: EncodeHex(epoch),
 		// Version:          version.ABCIVersion,
 		// AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.state.blockHeight,
@@ -91,76 +92,66 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *Tran
 	return
 }
 
-func (app *KatzenmintApplication) executeTx(tx *Transaction) (err error) {
+func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
+	// check for the epoch relative to the current epoch
+	if tx.Epoch < app.state.currentEpoch-1 || tx.Epoch > app.state.currentEpoch+1 {
+		return fmt.Errorf("expect transaction for epoch within +-1 to %d, but got epoch %d", app.state.currentEpoch, tx.Epoch)
+	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		var verifier cert.Verifier
-		verifier, err = s11n.GetVerifierFromDescriptor([]byte(tx.Payload))
+		verifier, err := s11n.GetVerifierFromDescriptor([]byte(tx.Payload))
 		if err != nil {
-			return
+			return err
 		}
-		// TODO: checkout epoch
-		var desc *pki.MixDescriptor
 		payload := []byte(tx.Payload)
-		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		desc, err := s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
 		if err != nil {
-			return
+			return err
 		}
-		// ensured the descriptor is signed by the user
+		// ensure the descriptor is signed by the user
 		var pubKey *eddsa.PublicKey
 		if !desc.IdentityKey.Equal(pubKey) {
-			return
+			return fmt.Errorf("descriptor is not self-signed")
 		}
 		// make sure the descriptor is from authorized peerr
 		if !app.state.isDescriptorAuthorized(desc) {
-			return
-		}
-		if err = s11n.IsDescriptorWellFormed(desc, tx.Epoch); err != nil {
-			return
+			return fmt.Errorf("descriptor is not authorized")
 		}
 		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
-			return
+			return fmt.Errorf("error updating descriptor: %v", err)
 		}
 	case AddConsensusDocument:
 		payload := []byte(tx.Payload)
-		var doc *pki.Document
-		doc, err = s11n.VerifyAndParseDocument(payload)
+		doc, err := s11n.VerifyAndParseDocument(payload)
 		if err != nil {
-			return
+			return err
 		} else if doc.Epoch != tx.Epoch {
-			err = s11n.ErrInvalidEpoch
-			return
-		}
-		if err = s11n.IsDocumentWellFormed(doc); err != nil {
-			return
+			return s11n.ErrInvalidEpoch
 		}
 		if !app.state.isDocumentAuthorized(doc) {
-			return
+			return fmt.Errorf("document is not authorized")
 		}
 		err = app.state.updateDocument(payload, doc, tx.Epoch)
 		if err != nil {
-			return
+			return fmt.Errorf("error updating document: %v", err)
 		}
 	case AddNewAuthority:
 		// TODO: update validators
-		var authority *Authority
-		// pk := tx.PublicKeyBytesArray()
 		payload := []byte(tx.Payload)
-		authority, err = VerifyAndParseAuthority(payload)
+		authority, err := VerifyAndParseAuthority(payload)
 		if err != nil {
-			fmt.Printf("failed to parse authority: %+v\n", err)
-			return
+			return fmt.Errorf("failed to parse authority: %v", err)
 		}
 		err = app.state.updateAuthority(payload, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
 		if err != nil {
-			fmt.Printf("failed to update authority: %+v\n", err)
-			return
+			return fmt.Errorf("error updating authority: %v", err)
 		}
 	default:
-		err = fmt.Errorf("transaction type not support yet")
+		return fmt.Errorf("transaction type not supported")
 	}
-	return
+	// Unreached
+	return nil
 }
 
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {

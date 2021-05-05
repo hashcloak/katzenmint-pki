@@ -59,11 +59,12 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 	}
 	return &KatzenmintState{
 		appHash:          make([]byte, 0), // TODO: load
+		blockHeight:      0,               // TODO: load
+		currentEpoch:     1,               // TODO: load
+		genesisEpoch:     1,               // TODO: load
 		tree:             tree,
 		layers:           defaultLayers,
 		minNodesPerLayer: defaultMinNodesPerLayer,
-		currentEpoch:     1,                       // TODO: load
-		genesisEpoch:     1,                       // TODO: load
 		parameters:       &katvoting.Parameters{}, // TODO: load
 		documents:        make(map[uint64]*document),
 		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
@@ -89,6 +90,7 @@ func (state *KatzenmintState) Commit() []byte {
 		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
+	state.currentEpoch++ // temporary
 	if state.newDocumentRequired() {
 		doc, err := state.generateDocument()
 		if err != nil {
@@ -171,16 +173,12 @@ func (state *KatzenmintState) Get(key []byte) ([]byte, error) {
 	return ret, nil
 }
 
+// Note: Caller ensures that the epoch is the current epoch +- 1.
 func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixDescriptor, epoch uint64) (err error) {
 	state.Lock()
 	defer state.Unlock()
 
-	// Note: Caller ensures that the epoch is the current epoch +- 1.
 	pk := desc.IdentityKey.ByteArray()
-
-	if (int64)(epoch) < state.blockHeight {
-		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
-	}
 
 	// Get the public key -> descriptor map for the epoch.
 	m, ok := state.descriptors[epoch]
@@ -232,15 +230,10 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	return
 }
 
+// Note: Caller ensures that the epoch is the current epoch +- 1.
 func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, epoch uint64) (err error) {
 	state.Lock()
 	defer state.Unlock()
-
-	// Note: Caller ensures that the epoch is the current epoch +- 1.
-	// pk := doc.IdentityKey.ByteArray()
-	if (int64)(epoch) < state.blockHeight {
-		return fmt.Errorf("state: epoch %v is less than current block height", epoch)
-	}
 
 	// Get the public key -> document map for the epoch.
 	m, ok := state.documents[epoch]

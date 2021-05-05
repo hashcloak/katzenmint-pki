@@ -18,6 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testEpoch = 1
+
 func TestUpdateDescriptor(t *testing.T) {
 	require := require.New(t)
 	desc, _ := CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)

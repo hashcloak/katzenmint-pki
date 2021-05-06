@@ -9,6 +9,7 @@ import (
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	"github.com/stretchr/testify/require"
+	"github.com/ugorji/go/codec"
 )
 
 // create test descriptor
@@ -78,5 +79,8 @@ func CreateTestDocument(require *require.Assertions, epoch uint64) (*s11n.Docume
 	}
 	serialized, err := s11n.SerializeDocument(doc)
 	require.NoError(err, "SerializeDocument()")
+	dec := codec.NewDecoderBytes(serialized, jsonHandle)
+	err = dec.Decode(doc)
+	require.NoError(err, "ParseDocument()")
 	return doc, serialized
 }

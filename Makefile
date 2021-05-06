@@ -16,7 +16,7 @@ lint:
 .PHONY: test
 test:
 	go test s11n/*.go 
-	go test -tags=$(GOTAGS) command.go query.go authority.go util.go helper.go encoding*.go transaction*.go state*.go app*.go
+	go test -tags=$(GOTAGS) errors.go command.go query.go authority.go util.go helper.go encoding*.go transaction*.go state*.go app*.go
 
 
 .PHONY: setup

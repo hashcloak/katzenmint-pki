@@ -55,23 +55,23 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *Transaction) {
+func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err error) {
 	tx = new(Transaction)
 	dec := codec.NewDecoderBytes(rawTx, jsonHandle)
-	if err := dec.Decode(tx); err != nil {
-		code = 1
+	if err = dec.Decode(tx); err != nil {
+		err = ErrTxIsNotValidJSON
 		return
 	}
 	if len(tx.PublicKey) != ed25519.PublicKeySize*2 {
-		code = 2
+		err = ErrTxWrongPublicKeySize
 		return
 	}
 	if len(tx.Signature) != ed25519.SignatureSize*2 {
-		code = 3
+		err = ErrTxWrongSignatureSize
 		return
 	}
 	if !tx.IsVerified() {
-		code = 4
+		err = ErrTxWrongSignature
 		return
 	}
 	switch tx.Command {
@@ -80,13 +80,11 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (code uint32, tx *Tran
 	case AddNewAuthority:
 		addr := tx.Address()
 		if !app.state.isAuthorized(addr) {
-			fmt.Println("Non authorized authority")
-			code = 5
+			err = ErrTxNonAuthorized
 			return
 		}
-		code = 0
 	default:
-		code = 6
+		err = ErrTxCommandNotFound
 	}
 
 	return
@@ -155,11 +153,11 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 }
 
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	code, tx := app.isTxValid(req.Tx)
-	if code != abcitypes.CodeTypeOK {
-		return abcitypes.ResponseDeliverTx{Code: code}
+	tx, err := app.isTxValid(req.Tx)
+	if err != nil {
+		return abcitypes.ResponseDeliverTx{Code: err.(KatzenmintError).Code}
 	}
-	err := app.executeTx(tx)
+	err = app.executeTx(tx)
 	if err != nil {
 		return abcitypes.ResponseDeliverTx{Code: 0xFF, Log: err.Error()}
 	}
@@ -168,8 +166,11 @@ func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abci
 
 // TODO: gas formula
 func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	code, _ := app.isTxValid(req.Tx)
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+	_, err := app.isTxValid(req.Tx)
+	if err != nil {
+		return abcitypes.ResponseCheckTx{Code: err.(KatzenmintError).Code, GasWanted: 1}
+	}
+	return abcitypes.ResponseCheckTx{Code: abcitypes.CodeTypeOK, GasWanted: 1}
 }
 
 // TODO: should update the validators map after commit

@@ -1,4 +1,4 @@
-package katzenmint
+package testutil
 
 import (
 	"fmt"

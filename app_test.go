@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cosmos/iavl"
+	"github.com/hashcloak/katzenmint-pki/testutil"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/stretchr/testify/assert"
@@ -138,7 +139,7 @@ func TestPostDocument(t *testing.T) {
 	require.Nil(err)
 
 	// Create transaction
-	_, sDoc := CreateTestDocument(require, epoch)
+	_, sDoc := testutil.CreateTestDocument(require, epoch)
 	rawTx := Transaction{
 		Version: ProtocolVersion,
 		Epoch:   epoch,

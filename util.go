@@ -5,15 +5,10 @@ package katzenmint
 
 import (
 	"encoding/binary"
-	"fmt"
 
-	"github.com/cosmos/iavl"
-	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/rand"
-	"github.com/katzenpost/core/epochtime"
 	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/core/sphinx/constants"
-	"github.com/tendermint/tendermint/crypto/merkle"
 )
 
 const (
@@ -35,103 +30,6 @@ func storageKey(keyPrefix string, keyID []byte, version uint64) (key []byte) {
 	key = append(key[:], ':')
 	key = append(key[:], IDHex[:]...)
 	return
-}
-
-func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.ProofOperator, error) {
-	// TODO: postpone the document for some blocks?
-	// var postponDeadline = 10
-
-	state.RLock()
-	defer state.RUnlock()
-
-	e := make([]byte, 8)
-	binary.PutUvarint(e, epoch)
-	key := storageKey(documentsBucket, e, epoch)
-	doc, proof, err := state.tree.GetWithProof(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	if doc == nil {
-		// TODO: replace how we get `now`
-		now, _, _ := epochtime.Now()
-		if epoch <= now {
-			return nil, nil, fmt.Errorf("document for epoch %d was not generated and will never exist", epoch)
-		}
-		if epoch > now+1 {
-			return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
-		}
-		return nil, nil, fmt.Errorf("document for epoch %d is not ready yet", epoch)
-	}
-	valueOp := iavl.NewValueOp(key, proof)
-	return doc, valueOp, nil
-}
-
-func (s *KatzenmintState) generateDocument() (*document, error) {
-	s.Lock()
-	defer s.Unlock()
-
-	// Carve out the descriptors between providers and nodes.
-	var providers [][]byte
-	var nodes []*descriptor
-	for _, v := range s.descriptors[s.currentEpoch] {
-		if v.desc.Layer == pki.LayerProvider {
-			providers = append(providers, v.raw)
-		} else {
-			nodes = append(nodes, v)
-		}
-	}
-
-	// Assign nodes to layers.
-	var topology [][][]byte
-	if len(nodes) < s.layers*s.minNodesPerLayer {
-		return nil, fmt.Errorf("insufficient descriptors uploaded")
-	}
-	if d, ok := s.documents[s.currentEpoch-1]; ok {
-		topology = generateTopology(nodes, d.doc, s.layers)
-	} else {
-		topology = generateRandomTopology(nodes, s.layers)
-	}
-
-	// Build the Document.
-	doc := &s11n.Document{
-		Epoch:             s.currentEpoch,
-		GenesisEpoch:      s.genesisEpoch,
-		SendRatePerMinute: s.parameters.SendRatePerMinute,
-		Mu:                s.parameters.Mu,
-		MuMaxDelay:        s.parameters.MuMaxDelay,
-		LambdaP:           s.parameters.LambdaP,
-		LambdaPMaxDelay:   s.parameters.LambdaPMaxDelay,
-		LambdaL:           s.parameters.LambdaL,
-		LambdaLMaxDelay:   s.parameters.LambdaLMaxDelay,
-		LambdaD:           s.parameters.LambdaD,
-		LambdaDMaxDelay:   s.parameters.LambdaDMaxDelay,
-		LambdaM:           s.parameters.LambdaM,
-		LambdaMMaxDelay:   s.parameters.LambdaMMaxDelay,
-		Topology:          topology,
-		Providers:         providers,
-	}
-
-	// TODO: what to do with shared random value?
-
-	// Serialize the Document.
-	serialized, err := s11n.SerializeDocument(doc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize document: %v", err)
-	}
-
-	// Ensure the document is sane.
-	pDoc, err := s11n.VerifyAndParseDocument(serialized)
-	if err != nil {
-		return nil, fmt.Errorf("signed document failed validation: %v", err)
-	}
-	if pDoc.Epoch != s.currentEpoch {
-		return nil, fmt.Errorf("signed document has invalid epoch: %v", pDoc.Epoch)
-	}
-	ret := &document{
-		doc: pDoc,
-		raw: serialized,
-	}
-	return ret, nil
 }
 
 func generateTopology(nodeList []*descriptor, doc *pki.Document, layers int) [][][]byte {

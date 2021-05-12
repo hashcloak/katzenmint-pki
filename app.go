@@ -40,10 +40,10 @@ func NewKatzenmintApplication(db dbm.DB) *KatzenmintApplication {
 }
 
 func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-	epoch := make([]byte, 8)
-	binary.PutUvarint(epoch, app.state.currentEpoch)
+	var epoch [8]byte
+	binary.PutUvarint(epoch[:], app.state.currentEpoch)
 	return abcitypes.ResponseInfo{
-		Data: EncodeHex(epoch),
+		Data: EncodeHex(epoch[:]),
 		// Version:          version.ABCIVersion,
 		// AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.state.blockHeight,

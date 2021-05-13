@@ -21,6 +21,7 @@ import (
 )
 
 const genesisEpoch uint64 = 1
+const epochInterval int64 = 5
 
 type descriptor struct {
 	desc *pki.MixDescriptor
@@ -160,9 +161,11 @@ func (state *KatzenmintState) BeginBlock() {
 	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
 
-func (state *KatzenmintState) Commit() []byte {
+func (state *KatzenmintState) Commit() ([]byte, error) {
 	state.Lock()
 	defer state.Unlock()
+
+	var errDoc error
 	if len(state.deferCommit) > 0 {
 		for _, def := range state.deferCommit {
 			def()
@@ -171,45 +174,36 @@ func (state *KatzenmintState) Commit() []byte {
 	}
 	state.blockHeight++
 	if state.newDocumentRequired() {
-		doc, err := state.generateDocument()
-		if err != nil {
-			// no logging yet?! use panic first for debug
-			panic(err)
+		var doc *document
+		if doc, errDoc = state.generateDocument(); errDoc == nil {
+			errDoc = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
+			if errDoc == nil {
+				state.currentEpoch++
+				state.epochStartHeight = state.blockHeight
+				// TODO: Prune related descriptors
+			}
 		}
-		err = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
-		if err != nil {
-			// no logging yet?! use panic first for debug
-			panic(err)
-		}
-		state.currentEpoch++
-		state.epochStartHeight = state.blockHeight
-		// TODO: Prune related descriptors
 	}
 	epochInfoValue := make([]byte, 16)
 	binary.PutUvarint(epochInfoValue[:8], state.currentEpoch)
 	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
-	err := state.Set([]byte(epochInfoKey), epochInfoValue)
-	if err != nil {
-		// no logging yet?! use panic first for debug
-		panic(err)
-	}
+	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
 	appHash, _, err := state.tree.SaveVersion()
-	if err != nil {
-		// no logging yet?! use panic first for debug
-		panic(err)
+	if err == nil {
+		err = errDoc
 	}
 	state.appHash = appHash
-	return appHash
+
+	return appHash, err
 }
 
 func (state *KatzenmintState) newDocumentRequired() bool {
 	// TODO: determine when to finish the current epoch
-	return state.blockHeight > state.epochStartHeight+5
+	return state.blockHeight > state.epochStartHeight+epochInterval
 }
 
 func (s *KatzenmintState) generateDocument() (*document, error) {
-	s.Lock()
-	defer s.Unlock()
+	// Cannot lock here
 
 	// Carve out the descriptors between providers and nodes.
 	var providers [][]byte
@@ -420,8 +414,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 
 // Note: Caller ensures that the epoch is the current epoch +- 1.
 func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, epoch uint64) (err error) {
-	state.Lock()
-	defer state.Unlock()
+	// Cannot lock here
 
 	// Get the public key -> document map for the epoch.
 	m, ok := state.documents[epoch]

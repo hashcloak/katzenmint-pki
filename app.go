@@ -97,11 +97,11 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		verifier, err := s11n.GetVerifierFromDescriptor([]byte(tx.Payload))
+		payload := []byte(tx.Payload)
+		verifier, err := s11n.GetVerifierFromDescriptor(payload)
 		if err != nil {
 			return err
 		}
-		payload := []byte(tx.Payload)
 		desc, err := s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
 		if err != nil {
 			return err
@@ -175,7 +175,7 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 
 // TODO: should update the validators map after commit
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	appHash := app.state.Commit()
+	appHash, _ := app.state.Commit()
 	return abcitypes.ResponseCommit{Data: appHash}
 }
 

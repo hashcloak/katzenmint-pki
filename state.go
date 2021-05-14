@@ -161,10 +161,14 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 			// return true
 		}
 		var protopk pc.PublicKey
-		protopk.Unmarshal(id)
-		pk, err := cryptoenc.PubKeyFromProto(protopk)
+		err = protopk.Unmarshal(id)
 		if err != nil {
 			panic(fmt.Errorf("error unmarshal proto: %v", err))
+			// return true
+		}
+		pk, err := cryptoenc.PubKeyFromProto(protopk)
+		if err != nil {
+			panic(fmt.Errorf("error extraction from proto: %v", err))
 			// return true
 		}
 		state.validators[string(pk.Address())] = protopk

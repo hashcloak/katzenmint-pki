@@ -33,7 +33,7 @@ func TestNewStateBasic(t *testing.T) {
 	// advance block height
 	require.Equal(int64(0), state.blockHeight)
 	state.BeginBlock()
-	state.Commit()
+	_, _ = state.Commit()
 	require.Equal(int64(1), state.blockHeight)
 
 	// test that basic state info can be rebuilt

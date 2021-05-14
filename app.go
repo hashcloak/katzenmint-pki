@@ -8,7 +8,9 @@ import (
 	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
+	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
@@ -56,12 +58,15 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 }
 
 func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err error) {
+	// decode raw into transcation
 	tx = new(Transaction)
 	dec := codec.NewDecoderBytes(rawTx, jsonHandle)
 	if err = dec.Decode(tx); err != nil {
 		err = ErrTxIsNotValidJSON
 		return
 	}
+
+	// verify transaction signature
 	if len(tx.PublicKey) != ed25519.PublicKeySize*2 {
 		err = ErrTxWrongPublicKeySize
 		return
@@ -74,8 +79,28 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 		err = ErrTxWrongSignature
 		return
 	}
+
+	// command specific checks
 	switch tx.Command {
 	case PublishMixDescriptor:
+		var verifier cert.Verifier
+		var desc *pki.MixDescriptor
+		var pubKey *eddsa.PublicKey
+		payload := []byte(tx.Payload)
+		verifier, err = s11n.GetVerifierFromDescriptor(payload)
+		if err != nil {
+			err = ErrTxDescInvalidVerifier
+			return
+		}
+		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		if err != nil {
+			err = ErrTxDescFalseVerification
+			return
+		}
+		if !desc.IdentityKey.Equal(pubKey) {
+			err = ErrTxDescNotSelfSigned
+			return
+		}
 	case AddConsensusDocument:
 	case AddNewAuthority:
 		addr := tx.Address()
@@ -98,18 +123,9 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 	switch tx.Command {
 	case PublishMixDescriptor:
 		payload := []byte(tx.Payload)
-		verifier, err := s11n.GetVerifierFromDescriptor(payload)
+		desc, err := s11n.ParseDescriptorWithoutVerify(payload)
 		if err != nil {
 			return err
-		}
-		desc, err := s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
-		if err != nil {
-			return err
-		}
-		// ensure the descriptor is signed by the user
-		var pubKey *eddsa.PublicKey
-		if !desc.IdentityKey.Equal(pubKey) {
-			return fmt.Errorf("descriptor is not self-signed")
 		}
 		// make sure the descriptor is from authorized peerr
 		if !app.state.isDescriptorAuthorized(desc) {

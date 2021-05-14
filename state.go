@@ -90,66 +90,85 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 	}
 
 	// Load documents
-	end := make([]byte, len(documentsBucket)+1)
+	end := make([]byte, len(documentsBucket))
 	copy(end, []byte(documentsBucket))
 	end = append(end, 0xff)
-	tree.IterateRange([]byte(documentsBucket), end, false, func(key, value []byte) bool {
+	_ = tree.IterateRange([]byte(documentsBucket), end, true, func(key, value []byte) bool {
 		id, epoch := unpackStorageKey(key)
 		if id == nil {
-			return true
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
 		}
 		doc, err := s11n.VerifyAndParseDocument(value)
 		if err != nil {
-			return true
+			panic(fmt.Errorf("error parsing document: %v", err))
+			// return true
 		}
 		state.documents[epoch] = &document{doc: doc, raw: value}
-		return true
+		return false
 	})
 
 	// Load descriptors
-	end = make([]byte, len(descriptorsBucket)+1)
+	end = make([]byte, len(descriptorsBucket))
 	copy(end, []byte(descriptorsBucket))
 	end = append(end, 0xff)
-	tree.IterateRange([]byte(descriptorsBucket), end, false, func(key, value []byte) bool {
+	_ = tree.IterateRange([]byte(descriptorsBucket), end, true, func(key, value []byte) bool {
 		id, epoch := unpackStorageKey(key)
 		if id == nil {
-			return true
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
 		}
-		verifier, err := s11n.GetVerifierFromDescriptor(id)
-		if err != nil || !bytes.Equal(verifier.Identity(), id) {
-			return true
-		}
-		desc, err := s11n.VerifyAndParseDescriptor(verifier, id, epoch)
+		verifier, err := s11n.GetVerifierFromDescriptor(value)
 		if err != nil {
-			return true
+			panic(fmt.Errorf("error getting descriptor signer: %v", err))
+			// return true
 		}
-		var pk [32]byte
-		copy(pk[:], id)
-		state.descriptors[epoch][pk] = &descriptor{desc: desc, raw: value}
-		return true
+		if !bytes.Equal(verifier.Identity(), id) {
+			panic(fmt.Errorf("storage key id %v has another descriptor id %v", id, verifier.Identity()))
+			// return true
+		}
+		desc, err := s11n.VerifyAndParseDescriptor(verifier, value, epoch)
+		if err != nil {
+			panic(fmt.Errorf("error parsing descriptor: %v", err))
+			// return true
+		}
+		var pubkey [32]byte
+		copy(pubkey[:], id)
+		if _, ok := state.descriptors[epoch]; !ok {
+			state.descriptors[epoch] = make(map[[32]byte]*descriptor)
+		}
+		state.descriptors[epoch][pubkey] = &descriptor{desc: desc, raw: value}
+		return false
 	})
 
 	// Load validators
-	end = make([]byte, len(authoritiesBucket)+1)
+	end = make([]byte, len(authoritiesBucket))
 	copy(end, []byte(authoritiesBucket))
 	end = append(end, 0xff)
-	tree.IterateRange([]byte(authoritiesBucket), end, false, func(key, value []byte) bool {
+	_ = tree.IterateRange([]byte(authoritiesBucket), end, true, func(key, value []byte) bool {
 		id, _ := unpackStorageKey(key)
 		if id == nil {
-			return true
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
 		}
 		auth, err := VerifyAndParseAuthority(value)
-		if err != nil || !bytes.Equal(auth.IdentityKey.Bytes(), id) {
-			return true
+		if err != nil {
+			panic(fmt.Errorf("error parsing authority: %v", err))
+			// return true
+		}
+		if !bytes.Equal(auth.IdentityKey.Bytes(), id) {
+			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.IdentityKey.Bytes()))
+			// return true
 		}
 		var protopk pc.PublicKey
 		protopk.Unmarshal(id)
 		pk, err := cryptoenc.PubKeyFromProto(protopk)
 		if err != nil {
-			return true
+			panic(fmt.Errorf("error unmarshal proto: %v", err))
+			// return true
 		}
 		state.validators[string(pk.Address())] = protopk
-		return true
+		return false
 	})
 
 	return state

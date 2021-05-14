@@ -27,21 +27,25 @@ func storageKey(keyPrefix string, keyID []byte, epoch uint64) (key []byte) {
 
 	key = make([]byte, len(keyPrefix))
 	copy(key, keyPrefix)
-	key = append(key[:], ':')
+	key = append(key[:], []byte(":")...)
 	key = append(key[:], epochHex[:]...)
-	key = append(key[:], ':')
+	key = append(key[:], []byte(":")...)
 	key = append(key[:], IDHex[:]...)
 	return
 }
 
 func unpackStorageKey(key []byte) (keyID []byte, epoch uint64) {
 	pre := bytes.Index(key, []byte(":"))
-	post := bytes.Index(key[pre+1:], []byte(":"))
-	epoch, read := binary.Uvarint(key[post+1:])
-	if pre < 0 || post < 0 || read <= 0 {
+	post := bytes.LastIndex(key, []byte(":"))
+	if pre < 0 || post <= pre {
 		return nil, 0
 	}
-	return key[pre+1 : post], epoch
+	epoch, read := binary.Uvarint(DecodeHex(string(key[pre+1 : post])))
+	keyID = DecodeHex(string(key[post+1:]))
+	if read <= 0 {
+		return nil, 0
+	}
+	return
 }
 
 func generateTopology(nodeList []*descriptor, doc *pki.Document, layers int) [][][]byte {

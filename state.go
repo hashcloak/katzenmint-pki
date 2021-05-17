@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/cosmos/iavl"
+	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	katvoting "github.com/katzenpost/authority/voting/server/config"
 	"github.com/katzenpost/core/crypto/eddsa"
@@ -19,10 +20,8 @@ import (
 	dbm "github.com/tendermint/tm-db"
 )
 
-var (
-	defaultLayers           = 3
-	defaultMinNodesPerLayer = 2
-)
+const genesisEpoch uint64 = 1
+const epochInterval int64 = 5
 
 type descriptor struct {
 	desc *pki.MixDescriptor
@@ -36,10 +35,10 @@ type document struct {
 
 type KatzenmintState struct {
 	sync.RWMutex
-	appHash      []byte
-	blockHeight  int64
-	currentEpoch uint64
-	genesisEpoch uint64
+	appHash          []byte
+	blockHeight      int64
+	currentEpoch     uint64
+	epochStartHeight int64
 
 	tree *iavl.MutableTree
 
@@ -60,21 +59,123 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 	if err != nil {
 		panic(fmt.Errorf("error creating iavl tree"))
 	}
-	return &KatzenmintState{
-		appHash:          make([]byte, 0), // TODO: load
-		blockHeight:      0,               // TODO: load
-		currentEpoch:     1,               // TODO: load
-		genesisEpoch:     1,               // TODO: load
+	version, err := tree.Load()
+	if err != nil {
+		panic(fmt.Errorf("error loading iavl tree"))
+	}
+	state := &KatzenmintState{
+		appHash:          tree.Hash(),
+		blockHeight:      version,
 		tree:             tree,
-		layers:           defaultLayers,
-		minNodesPerLayer: defaultMinNodesPerLayer,
-		parameters:       &katvoting.Parameters{}, // TODO: load
+		layers:           config.DefaultLayers,
+		minNodesPerLayer: config.DefaultMinNodesPerLayer,
+		parameters:       &config.DefaultParameters,
 		documents:        make(map[uint64]*document),
 		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
-		validatorUpdates: make([]abcitypes.ValidatorUpdate, 1),
 		validators:       make(map[string]pc.PublicKey),
+		validatorUpdates: make([]abcitypes.ValidatorUpdate, 0),
 		deferCommit:      make([]func(), 0),
 	}
+
+	// Load current epoch and its start height
+	epochInfoValue, err := state.Get([]byte(epochInfoKey))
+	if version == 0 {
+		state.currentEpoch = genesisEpoch
+		state.epochStartHeight = 0
+	} else if err != nil || epochInfoValue == nil || len(epochInfoValue) != 16 {
+		panic("error loading the current epoch number and its starting height")
+	} else {
+		state.currentEpoch, _ = binary.Uvarint(epochInfoValue[:8])
+		state.epochStartHeight, _ = binary.Varint(epochInfoValue[8:])
+	}
+
+	// Load documents
+	end := make([]byte, len(documentsBucket))
+	copy(end, []byte(documentsBucket))
+	end = append(end, 0xff)
+	_ = tree.IterateRange([]byte(documentsBucket), end, true, func(key, value []byte) bool {
+		id, epoch := unpackStorageKey(key)
+		if id == nil {
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
+		}
+		doc, err := s11n.VerifyAndParseDocument(value)
+		if err != nil {
+			panic(fmt.Errorf("error parsing document: %v", err))
+			// return true
+		}
+		state.documents[epoch] = &document{doc: doc, raw: value}
+		return false
+	})
+
+	// Load descriptors
+	end = make([]byte, len(descriptorsBucket))
+	copy(end, []byte(descriptorsBucket))
+	end = append(end, 0xff)
+	_ = tree.IterateRange([]byte(descriptorsBucket), end, true, func(key, value []byte) bool {
+		id, epoch := unpackStorageKey(key)
+		if id == nil {
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
+		}
+		verifier, err := s11n.GetVerifierFromDescriptor(value)
+		if err != nil {
+			panic(fmt.Errorf("error getting descriptor signer: %v", err))
+			// return true
+		}
+		if !bytes.Equal(verifier.Identity(), id) {
+			panic(fmt.Errorf("storage key id %v has another descriptor id %v", id, verifier.Identity()))
+			// return true
+		}
+		desc, err := s11n.VerifyAndParseDescriptor(verifier, value, epoch)
+		if err != nil {
+			panic(fmt.Errorf("error parsing descriptor: %v", err))
+			// return true
+		}
+		var pubkey [32]byte
+		copy(pubkey[:], id)
+		if _, ok := state.descriptors[epoch]; !ok {
+			state.descriptors[epoch] = make(map[[32]byte]*descriptor)
+		}
+		state.descriptors[epoch][pubkey] = &descriptor{desc: desc, raw: value}
+		return false
+	})
+
+	// Load validators
+	end = make([]byte, len(authoritiesBucket))
+	copy(end, []byte(authoritiesBucket))
+	end = append(end, 0xff)
+	_ = tree.IterateRange([]byte(authoritiesBucket), end, true, func(key, value []byte) bool {
+		id, _ := unpackStorageKey(key)
+		if id == nil {
+			panic(fmt.Errorf("unable to unpack storage key %v", key))
+			// return true
+		}
+		auth, err := VerifyAndParseAuthority(value)
+		if err != nil {
+			panic(fmt.Errorf("error parsing authority: %v", err))
+			// return true
+		}
+		if !bytes.Equal(auth.IdentityKey.Bytes(), id) {
+			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.IdentityKey.Bytes()))
+			// return true
+		}
+		var protopk pc.PublicKey
+		err = protopk.Unmarshal(id)
+		if err != nil {
+			panic(fmt.Errorf("error unmarshal proto: %v", err))
+			// return true
+		}
+		pk, err := cryptoenc.PubKeyFromProto(protopk)
+		if err != nil {
+			panic(fmt.Errorf("error extraction from proto: %v", err))
+			// return true
+		}
+		state.validators[string(pk.Address())] = protopk
+		return false
+	})
+
+	return state
 }
 
 func (state *KatzenmintState) BeginBlock() {
@@ -83,9 +184,11 @@ func (state *KatzenmintState) BeginBlock() {
 	state.validatorUpdates = make([]abcitypes.ValidatorUpdate, 0)
 }
 
-func (state *KatzenmintState) Commit() []byte {
+func (state *KatzenmintState) Commit() ([]byte, error) {
 	state.Lock()
 	defer state.Unlock()
+
+	var errDoc error
 	if len(state.deferCommit) > 0 {
 		for _, def := range state.deferCommit {
 			def()
@@ -93,35 +196,37 @@ func (state *KatzenmintState) Commit() []byte {
 		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
-	state.currentEpoch++ // temporary
 	if state.newDocumentRequired() {
-		doc, err := state.generateDocument()
-		if err != nil {
-			// no logging yet?! use panic first for debug
-			panic(err)
+		var doc *document
+		if doc, errDoc = state.generateDocument(); errDoc == nil {
+			errDoc = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
+			if errDoc == nil {
+				state.currentEpoch++
+				state.epochStartHeight = state.blockHeight
+				// TODO: Prune related descriptors
+			}
 		}
-		state.documents[state.currentEpoch] = doc
-		// TODO: make checks and save them
-		// TODO: and prune related descriptors
-		state.currentEpoch++
 	}
+	epochInfoValue := make([]byte, 16)
+	binary.PutUvarint(epochInfoValue[:8], state.currentEpoch)
+	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
+	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
 	appHash, _, err := state.tree.SaveVersion()
-	if err != nil {
-		// no logging yet?! use panic first for debug
-		panic(err)
+	if err == nil {
+		err = errDoc
 	}
 	state.appHash = appHash
-	return appHash
+
+	return appHash, err
 }
 
 func (state *KatzenmintState) newDocumentRequired() bool {
 	// TODO: determine when to finish the current epoch
-	return false
+	return state.blockHeight > state.epochStartHeight+epochInterval
 }
 
 func (s *KatzenmintState) generateDocument() (*document, error) {
-	s.Lock()
-	defer s.Unlock()
+	// Cannot lock here
 
 	// Carve out the descriptors between providers and nodes.
 	var providers [][]byte
@@ -148,7 +253,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Build the Document.
 	doc := &s11n.Document{
 		Epoch:             s.currentEpoch,
-		GenesisEpoch:      s.genesisEpoch,
+		GenesisEpoch:      genesisEpoch,
 		SendRatePerMinute: s.parameters.SendRatePerMinute,
 		Mu:                s.parameters.Mu,
 		MuMaxDelay:        s.parameters.MuMaxDelay,
@@ -332,8 +437,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 
 // Note: Caller ensures that the epoch is the current epoch +- 1.
 func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, epoch uint64) (err error) {
-	state.Lock()
-	defer state.Unlock()
+	// Cannot lock here
 
 	// Get the public key -> document map for the epoch.
 	m, ok := state.documents[epoch]
@@ -354,13 +458,7 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 		return err
 	}
 
-	// Store the raw descriptor and the parsed struct.
-	state.deferCommit = append(state.deferCommit, func() {
-		d := new(document)
-		d.doc = doc
-		d.raw = rawDoc
-		state.documents[epoch] = d
-	})
+	state.documents[epoch] = &document{doc: doc, raw: rawDoc}
 
 	/*
 		fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)

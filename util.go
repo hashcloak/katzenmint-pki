@@ -4,6 +4,7 @@
 package katzenmint
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/katzenpost/core/crypto/rand"
@@ -15,20 +16,35 @@ const (
 	descriptorsBucket = "k_descriptors"
 	documentsBucket   = "k_documents"
 	authoritiesBucket = "k_authorities"
+	epochInfoKey      = "k_epoch"
 )
 
-func storageKey(keyPrefix string, keyID []byte, version uint64) (key []byte) {
-	verHex := make([]byte, 8)
-	binary.PutUvarint(verHex, version)
-	verHex = []byte(EncodeHex(verHex))
+func storageKey(keyPrefix string, keyID []byte, epoch uint64) (key []byte) {
+	epochHex := make([]byte, 8)
+	binary.PutUvarint(epochHex, epoch)
+	epochHex = []byte(EncodeHex(epochHex))
 	IDHex := []byte(EncodeHex(keyID))
 
 	key = make([]byte, len(keyPrefix))
 	copy(key, keyPrefix)
-	key = append(key[:], ':')
-	key = append(key[:], verHex[:]...)
-	key = append(key[:], ':')
+	key = append(key[:], []byte(":")...)
+	key = append(key[:], epochHex[:]...)
+	key = append(key[:], []byte(":")...)
 	key = append(key[:], IDHex[:]...)
+	return
+}
+
+func unpackStorageKey(key []byte) (keyID []byte, epoch uint64) {
+	pre := bytes.Index(key, []byte(":"))
+	post := bytes.LastIndex(key, []byte(":"))
+	if pre < 0 || post <= pre {
+		return nil, 0
+	}
+	epoch, read := binary.Uvarint(DecodeHex(string(key[pre+1 : post])))
+	keyID = DecodeHex(string(key[post+1:]))
+	if read <= 0 {
+		return nil, 0
+	}
 	return
 }
 

@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
+	"github.com/katzenpost/core/crypto/cert"
 	"github.com/katzenpost/core/crypto/eddsa"
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -39,10 +41,10 @@ func NewKatzenmintApplication(db dbm.DB, logger log.Logger) *KatzenmintApplicati
 }
 
 func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-	epoch := make([]byte, 8)
-	binary.PutUvarint(epoch, app.state.currentEpoch)
+	var epoch [8]byte
+	binary.PutUvarint(epoch[:], app.state.currentEpoch)
 	return abcitypes.ResponseInfo{
-		Data: EncodeHex(epoch),
+		Data: EncodeHex(epoch[:]),
 		// Version:          version.ABCIVersion,
 		// AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.state.blockHeight,
@@ -55,12 +57,15 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 }
 
 func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err error) {
+	// decode raw into transcation
 	tx = new(Transaction)
 	dec := codec.NewDecoderBytes(rawTx, jsonHandle)
 	if err = dec.Decode(tx); err != nil {
 		err = ErrTxIsNotValidJSON
 		return
 	}
+
+	// verify transaction signature
 	if len(tx.PublicKey) != ed25519.PublicKeySize*2 {
 		err = ErrTxWrongPublicKeySize
 		return
@@ -73,8 +78,28 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 		err = ErrTxWrongSignature
 		return
 	}
+
+	// command specific checks
 	switch tx.Command {
 	case PublishMixDescriptor:
+		var verifier cert.Verifier
+		var desc *pki.MixDescriptor
+		var pubKey *eddsa.PublicKey
+		payload := []byte(tx.Payload)
+		verifier, err = s11n.GetVerifierFromDescriptor(payload)
+		if err != nil {
+			err = ErrTxDescInvalidVerifier
+			return
+		}
+		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		if err != nil {
+			err = ErrTxDescFalseVerification
+			return
+		}
+		if !desc.IdentityKey.Equal(pubKey) {
+			err = ErrTxDescNotSelfSigned
+			return
+		}
 	case AddConsensusDocument:
 	case AddNewAuthority:
 		addr := tx.Address()
@@ -96,19 +121,10 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		verifier, err := s11n.GetVerifierFromDescriptor([]byte(tx.Payload))
-		if err != nil {
-			return err
-		}
 		payload := []byte(tx.Payload)
-		desc, err := s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		desc, err := s11n.ParseDescriptorWithoutVerify(payload)
 		if err != nil {
 			return err
-		}
-		// ensure the descriptor is signed by the user
-		var pubKey *eddsa.PublicKey
-		if !desc.IdentityKey.Equal(pubKey) {
-			return fmt.Errorf("descriptor is not self-signed")
 		}
 		// make sure the descriptor is from authorized peerr
 		if !app.state.isDescriptorAuthorized(desc) {
@@ -174,7 +190,7 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 
 // TODO: should update the validators map after commit
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	appHash := app.state.Commit()
+	appHash, _ := app.state.Commit()
 	return abcitypes.ResponseCommit{Data: appHash}
 }
 

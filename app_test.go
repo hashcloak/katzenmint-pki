@@ -165,9 +165,9 @@ func TestPostDocument(t *testing.T) {
 	m.App.BeginBlock(abcitypes.RequestBeginBlock{})
 	res, err := m.BroadcastTxCommit(context.Background(), tx)
 	require.Nil(err)
-	assert.True(res.CheckTx.IsOK())
+	assert.True(res.CheckTx.IsOK(), res.CheckTx.Log)
 	require.NotNil(res.DeliverTx)
-	assert.True(res.DeliverTx.IsOK())
+	assert.True(res.DeliverTx.IsOK(), res.DeliverTx.Log)
 	m.App.Commit()
 
 	// test the data exists in state

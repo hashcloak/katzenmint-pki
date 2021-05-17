@@ -88,6 +88,19 @@ func GetVerifierFromDescriptor(rawDesc []byte) (cert.Verifier, error) {
 	return d.IdentityKey, nil
 }
 
+func ParseDescriptorWithoutVerify(b []byte) (*pki.MixDescriptor, error) {
+	payload, err := cert.GetCertified(b)
+	if err != nil {
+		return nil, err
+	}
+	d := new(nodeDescriptor)
+	dec := codec.NewDecoderBytes(payload, jsonHandle)
+	if err = dec.Decode(d); err != nil {
+		return nil, err
+	}
+	return &d.MixDescriptor, nil
+}
+
 // VerifyAndParseDescriptor verifies the signature and deserializes the
 // descriptor.  MixDescriptors returned from this routine are guaranteed
 // to have been correctly self signed by the IdentityKey listed in the

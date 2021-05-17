@@ -1,6 +1,7 @@
 package katzenmint
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"testing"
@@ -19,90 +20,158 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testEpoch = 1
+const testEpoch = genesisEpoch
 
-func TestUpdateDescriptor(t *testing.T) {
+func TestNewStateBasic(t *testing.T) {
 	require := require.New(t)
-	desc, _ := testutil.CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
-	rawDesc := make([]byte, 10)
-	enc := codec.NewEncoderBytes(&rawDesc, jsonHandle)
-	if err := enc.Encode(desc); err != nil {
-		t.Fatalf("Failed to marshal mix descriptor: %+v\n", err)
-	}
-	db := dbm.NewMemDB()
-	defer db.Close()
-	state := NewKatzenmintState(db)
-	state.BeginBlock()
-	err := state.updateMixDescriptor(rawDesc, desc, testEpoch)
-	if err != nil {
-		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
-	}
-	_ = state.Commit()
-
-	pk := desc.IdentityKey.ByteArray()
-	if m, ok := state.descriptors[testEpoch]; !ok {
-		t.Fatal("Failed to update mix descriptor\n")
-	} else {
-		// should we compare descriptors?
-		if _, ok := m[pk]; !ok {
-			t.Fatal("Failed to update mix descriptor\n")
-		}
-	}
-	// test the data exists in db
-	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), testEpoch)
-	_, err = state.Get(key)
-	if err != nil {
-		t.Fatalf("Failed to get mix descriptor from database: %+v\n", err)
-	}
-}
-
-func TestUpdateDocument(t *testing.T) {
-	// assert := assert.New(t)
-	require := require.New(t)
-
-	// Create, validate and deserialize document.
-	_, sDoc := testutil.CreateTestDocument(require, testEpoch)
-	dDoc, err := s11n.VerifyAndParseDocument([]byte(sDoc))
-	if err != nil {
-		t.Fatalf("Failed to VerifyAndParseDocument document: %+v\n", err)
-	}
-	rawDoc := make([]byte, 10)
-	enc := codec.NewEncoderBytes(&rawDoc, jsonHandle)
-	if err := enc.Encode(dDoc); err != nil {
-		t.Fatalf("Failed to marshal pki document: %+v\n", err)
-	}
 
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
 	state := NewKatzenmintState(db)
 
-	// update document to state
+	// advance block height
+	require.Equal(int64(0), state.blockHeight)
 	state.BeginBlock()
-	err = state.updateDocument(rawDoc, dDoc, testEpoch)
+	_, _ = state.Commit()
+	require.Equal(int64(1), state.blockHeight)
+
+	// test that basic state info can be rebuilt
+	state = NewKatzenmintState(db)
+	require.Equal(int64(1), state.blockHeight)
+	require.Equal(genesisEpoch, state.currentEpoch)
+	require.Equal(int64(0), state.epochStartHeight)
+}
+
+func TestUpdateDescriptor(t *testing.T) {
+	require := require.New(t)
+
+	// create katzenmint state
+	db := dbm.NewMemDB()
+	defer db.Close()
+	state := NewKatzenmintState(db)
+
+	// create test descriptor
+	desc, rawDesc := testutil.CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
+
+	// update test descriptor
+	state.BeginBlock()
+	err := state.updateMixDescriptor(rawDesc, desc, testEpoch)
+	if err != nil {
+		t.Fatalf("Failed to update test descriptor: %+v\n", err)
+	}
+	_, err = state.Commit()
+	if err != nil {
+		t.Fatalf("Failed to commit: %v\n", err)
+	}
+
+	// test the data exists in database
+	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), testEpoch)
+	gotRaw, err := state.Get(key)
+	if err != nil {
+		t.Fatalf("Failed to get mix descriptor from database: %+v\n", err)
+	}
+	if !bytes.Equal(gotRaw, rawDesc) {
+		t.Fatalf("Got a wrong descriptor from database\n")
+	}
+
+	// test the data exists in memory
+	pk := desc.IdentityKey.ByteArray()
+	if m, ok := state.descriptors[testEpoch]; !ok {
+		t.Fatal("Failed to get mix descriptor from memory\n")
+	} else {
+		gotDesc, ok := m[pk]
+		if !ok {
+			t.Fatal("Failed to get mix descriptor from memory\n")
+		}
+		if !bytes.Equal(gotDesc.raw, rawDesc) {
+			t.Fatalf("Got a wrong descriptor from memory\n")
+		}
+	}
+
+	// test the data can be reloaded into memory
+	state = NewKatzenmintState(db)
+	if m, ok := state.descriptors[testEpoch]; !ok {
+		t.Fatal("Failed to reload mix descriptor into memory\n")
+	} else {
+		gotDesc, ok := m[pk]
+		if !ok {
+			t.Fatal("Failed to reload mix descriptor into memory\n")
+		}
+		if !bytes.Equal(gotDesc.raw, rawDesc) {
+			t.Fatalf("Got a wrong descriptor from reloaded memory\n")
+		}
+	}
+}
+
+func TestUpdateDocument(t *testing.T) {
+	require := require.New(t)
+
+	// create katzenmint state
+	db := dbm.NewMemDB()
+	defer db.Close()
+	state := NewKatzenmintState(db)
+
+	// create, validate and deserialize document
+	_, sDoc := testutil.CreateTestDocument(require, testEpoch)
+	dDoc, err := s11n.VerifyAndParseDocument(sDoc)
+	if err != nil {
+		t.Fatalf("Failed to VerifyAndParseDocument document: %+v\n", err)
+	}
+
+	// update document
+	state.BeginBlock()
+	err = state.updateDocument(sDoc, dDoc, testEpoch)
 	if err != nil {
 		t.Fatalf("Failed to update pki document: %+v\n", err)
 	}
-	_ = state.Commit()
-	if _, ok := state.documents[testEpoch]; !ok {
-		t.Fatal("Failed to update pki document\n")
+	_, err = state.Commit()
+	if err != nil {
+		t.Fatalf("Failed to commit: %v\n", err)
 	}
 
-	// test the data exists in state tree
+	// test the data exists in database
 	e := make([]byte, 8)
 	binary.PutUvarint(e, testEpoch)
 	key := storageKey(documentsBucket, e, testEpoch)
-	_, err = state.Get(key)
+	gotRaw, err := state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get pki document from database: %+v\n", err)
+	}
+	if !bytes.Equal(gotRaw, sDoc) {
+		t.Fatalf("Got a wrong document from database\n")
+	}
+
+	// test the data exists in memory
+	gotDoc, ok := state.documents[testEpoch]
+	if !ok {
+		t.Fatal("Failed to get pki document from memory\n")
+	}
+	if !bytes.Equal(gotDoc.raw, sDoc) {
+		t.Fatalf("Got a wrong document from memory\n")
+	}
+
+	// test the data can be reloaded into memory
+	state = NewKatzenmintState(db)
+	gotDoc, ok = state.documents[testEpoch]
+	if !ok {
+		t.Fatal("Failed to reload pki document into memory\n")
+	}
+	if !bytes.Equal(gotDoc.raw, sDoc) {
+		t.Fatalf("Got a wrong document from reloaded memory\n")
 	}
 }
 
 func TestUpdateAuthority(t *testing.T) {
-	// assert := assert.New(t)
 	require := require.New(t)
-	authority := new(Authority)
 
+	// create katzenmint state
+	db := dbm.NewMemDB()
+	defer db.Close()
+	state := NewKatzenmintState(db)
+
+	// create authority
+	authority := new(Authority)
 	authority.Auth = "katzenmint"
 	authority.Power = 1
 	k, err := eddsa.NewKeypair(rand.Reader)
@@ -116,24 +185,128 @@ func TestUpdateAuthority(t *testing.T) {
 	if err := enc.Encode(authority); err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
-	db := dbm.NewMemDB()
-	defer db.Close()
-	state := NewKatzenmintState(db)
 
+	// update authority
 	state.BeginBlock()
 	err = state.updateAuthority(rawAuth, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
 	if err != nil {
 		fmt.Printf("Failed to update authority: %+v\n", err)
 		return
 	}
-	_ = state.Commit()
+	_, err = state.Commit()
+	if err != nil {
+		t.Fatalf("Failed to commit: %v\n", err)
+	}
 
+	// test the data exists in database
 	key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get authority from database: %+v\n", err)
 	}
+	// TODO: check that the value is correct
 	if len(state.validatorUpdates) != 1 {
 		t.Fatal("Failed to update authority\n")
+	}
+}
+
+func TestDocumentGenerationUponCommit(t *testing.T) {
+	require := require.New(t)
+
+	// create katzenmint state
+	db := dbm.NewMemDB()
+	defer db.Close()
+	state := NewKatzenmintState(db)
+	epoch := state.currentEpoch
+	e := make([]byte, 8)
+	binary.PutUvarint(e, epoch)
+	key := storageKey(documentsBucket, e, epoch)
+
+	// create descriptorosts of providers
+	providers := make([]descriptor, 0)
+	for i := 0; i < state.minNodesPerLayer; i++ {
+		desc, rawDesc := testutil.CreateTestDescriptor(require, i, pki.LayerProvider, epoch)
+		providers = append(providers, descriptor{desc: desc, raw: rawDesc})
+	}
+
+	// create descriptors of mixs
+	mixs := make([]descriptor, 0)
+	for layer := 0; layer < state.layers; layer++ {
+		for i := 0; i < state.minNodesPerLayer; i++ {
+			desc, rawDesc := testutil.CreateTestDescriptor(require, i, 0, epoch)
+			mixs = append(mixs, descriptor{desc: desc, raw: rawDesc})
+		}
+	}
+
+	// update part of the descriptors
+	state.BeginBlock()
+	for _, p := range providers {
+		err := state.updateMixDescriptor(p.raw, p.desc, epoch)
+		if err != nil {
+			t.Fatalf("Failed to update provider descriptor: %+v\n", err)
+		}
+	}
+	for i, m := range mixs {
+		if i == 0 {
+			// skip one of the mix descriptors
+			continue
+		}
+		err := state.updateMixDescriptor(m.raw, m.desc, epoch)
+		if err != nil {
+			t.Fatalf("Failed to update mix descriptor: %+v\n", err)
+		}
+	}
+	_, err := state.Commit()
+	if err != nil {
+		t.Fatalf("Failed to commit: %v\n", err)
+	}
+
+	// proceed with enough block commits to enter the next epoch
+	for i := 0; i < int(epochInterval)-1; i++ {
+		state.BeginBlock()
+		_, err = state.Commit()
+		if err != nil {
+			t.Fatalf("Failed to commit: %v\n", err)
+		}
+	}
+	state.BeginBlock()
+	_, err = state.Commit()
+	if err == nil {
+		t.Fatal("Commit should report an error as a side effect because threshold of document creation is not achieved")
+	}
+
+	// test the non-existence of the document
+	_, ok := state.documents[epoch]
+	_, err = state.Get(key)
+	if ok || err == nil {
+		t.Fatalf("The pki document should not be generated at this moment because there is not enough mix descriptors\n")
+	}
+
+	// update the remaining descriptors up to the required threshold
+	state.BeginBlock()
+	err = state.updateMixDescriptor(mixs[0].raw, mixs[0].desc, epoch)
+	if err != nil {
+		t.Fatalf("Failed to update mix descriptor: %+v\n", err)
+	}
+	_, err = state.Commit()
+	if err != nil {
+		t.Fatalf("Failed to commit: %v\n", err)
+	}
+
+	// test the existence of the document
+	doc, ok := state.documents[epoch]
+	_, err = state.Get(key)
+	if !ok || err != nil {
+		t.Fatalf("The pki document should be generated automatically\n")
+	}
+
+	// test the document can be reloaded
+	state = NewKatzenmintState(db)
+	got, ok := state.documents[epoch]
+	if !ok {
+		t.Fatalf("The pki document should be reloaded\n")
+	}
+	if !bytes.Equal(got.raw, doc.raw) {
+		t.Fatalf("Reloaded doc inconsistent with the generated doc\n")
 	}
 }

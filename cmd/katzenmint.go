@@ -27,26 +27,26 @@ var (
 	dbPath     string
 )
 
-func newTendermint(app abci.Application, configFile string) (node *nm.Node, err error) {
-	// read config
-	config := cfg.DefaultConfig()
+func readConfig() (config *cfg.Config, err error) {
+	config = cfg.DefaultConfig()
 	config.RootDir = filepath.Dir(filepath.Dir(configFile))
 	viper.SetConfigFile(configFile)
 	if err = viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("viper failed to read config file: %w", err)
+		err = fmt.Errorf("viper failed to read config file: %w", err)
+		return
 	}
 	if err = viper.Unmarshal(config); err != nil {
-		return nil, fmt.Errorf("viper failed to unmarshal config: %w", err)
+		err = fmt.Errorf("viper failed to unmarshal config: %w", err)
+		return
 	}
 	if err = config.ValidateBasic(); err != nil {
-		return nil, fmt.Errorf("config is invalid: %w", err)
+		err = fmt.Errorf("config is invalid: %w", err)
+		return
 	}
+	return
+}
 
-	// create logger
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	if logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel); err != nil {
-		return nil, fmt.Errorf("failed to parse log level: %w", err)
-	}
+func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) (node *nm.Node, err error) {
 
 	// read private validator
 	pv := privval.LoadFilePV(
@@ -87,16 +87,26 @@ func main() {
 	if len(dbPath) == 0 {
 		dbPath = filepath.Join(os.TempDir(), "katzenmint")
 	}
+	config, err := readConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
 	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, dbPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
-		fmt.Fprintln(os.Stderr, "try running with -tags badgerdb")
+		fmt.Fprintf(os.Stderr, "failed to open badger db: %v\ntry running with -tags badgerdb\n", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	app := katzenmint.NewKatzenmintApplication(db)
-	node, err := newTendermint(app, configFile)
+	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	if logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse log level: %v", err)
+		os.Exit(1)
+	}
+
+	app := katzenmint.NewKatzenmintApplication(db, logger)
+	node, err := newTendermint(app, config, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
 		os.Exit(2)

@@ -3,13 +3,12 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	"encoding/binary"
-
-	// "crypto/sha256"
 	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/eddsa"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
@@ -28,14 +27,14 @@ var (
 type KatzenmintApplication struct {
 	state *KatzenmintState
 
-	// TODO: use tendermint logger?
-	// logger log.Logger
+	logger log.Logger
 }
 
-func NewKatzenmintApplication(db dbm.DB) *KatzenmintApplication {
+func NewKatzenmintApplication(db dbm.DB, logger log.Logger) *KatzenmintApplication {
 	state := NewKatzenmintState(db)
 	return &KatzenmintApplication{
-		state: state,
+		state:  state,
+		logger: logger,
 	}
 }
 
@@ -198,7 +197,7 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 	case GetConsensus:
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch)
 		if err != nil {
-			fmt.Printf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err)
+			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err))
 			resQuery.Log = "document does not exist"
 			resQuery.Code = 0x3
 			return
@@ -217,7 +216,7 @@ func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abci
 	for _, v := range req.Validators {
 		err := app.state.updateAuthority(nil, v)
 		if err != nil {
-			fmt.Printf("Error updating validators: %+v\n", err)
+			app.logger.Error(fmt.Sprintf("Error updating validators: %+v\n", err))
 		}
 	}
 	return abcitypes.ResponseInitChain{}
@@ -236,9 +235,9 @@ func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) ab
 					PubKey: pubKey,
 					Power:  ev.Validator.Power - 1,
 				})
-				fmt.Println("Decreased val power by 1 because of the equivocation", addr)
+				app.logger.Error(fmt.Sprintf("Decreased val power by 1 because of the equivocation: %s\n", addr))
 			} else {
-				fmt.Println("Wanted to punish val, but can't find it", addr)
+				app.logger.Error(fmt.Sprintf("Wanted to punish val, but can't find it: %s \n", addr))
 			}
 		}
 	}

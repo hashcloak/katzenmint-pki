@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/json"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/rpc/client/mock"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
@@ -37,6 +39,11 @@ var testNodes = []Node{
 	},
 }
 
+func newDiscardLogger() (logger log.Logger) {
+	logger = log.NewTMLogger(log.NewSyncWriter(ioutil.Discard))
+	return
+}
+
 // katzenmint integration test
 func TestAddAuthority(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
@@ -51,7 +58,8 @@ func TestAddAuthority(t *testing.T) {
 				os.RemoveAll(dbPath)
 			}(node.DBPath)
 
-			app := NewKatzenmintApplication(db)
+			logger := newDiscardLogger()
+			app := NewKatzenmintApplication(db, logger)
 			m := mock.ABCIApp{
 				App: app,
 			}
@@ -126,7 +134,8 @@ func TestPostDocument(t *testing.T) {
 	// setup application
 	db := dbm.NewMemDB()
 	defer db.Close()
-	app := NewKatzenmintApplication(db)
+	logger := newDiscardLogger()
+	app := NewKatzenmintApplication(db, logger)
 	m := mock.ABCIApp{
 		App: app,
 	}

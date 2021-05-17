@@ -1,21 +1,26 @@
 package katzenmint
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"crypto/ed25519"
+	"encoding/binary"
+	"encoding/json"
+	"net/url"
 	"os"
 	"testing"
 
-	"github.com/dgraph-io/badger"
-	"github.com/ugorji/go/codec"
-	// "github.com/katzenpost/core/crypto/ecdh"
+	"github.com/cosmos/iavl"
+	"github.com/hashcloak/katzenmint-pki/testutil"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/rpc/client/mock"
-	types "github.com/tendermint/tendermint/types"
+	dbm "github.com/tendermint/tm-db"
+	"github.com/ugorji/go/codec"
 )
 
 // Node represents test node
@@ -37,9 +42,9 @@ func TestAddAuthority(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
 	for i, node := range testNodes {
 		if i == 0 {
-			db, err := badger.Open(badger.DefaultOptions(node.DBPath))
+			db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, node.DBPath)
 			if err != nil {
-				t.Fatalf("Failed to open badger db: %v", err)
+				t.Fatalf("Failed to open badger db: %v; try running with -tags badgerdb", err)
 			}
 			defer func(dbPath string) {
 				db.Close()
@@ -52,9 +57,8 @@ func TestAddAuthority(t *testing.T) {
 			}
 
 			// get some info
-			info, err := m.ABCIInfo(context.Background())
+			_, err = m.ABCIInfo(context.Background())
 			require.Nil(err)
-			assert.Equal(``, info.Response.GetData())
 
 			// create authority
 			authority := new(Authority)
@@ -76,7 +80,7 @@ func TestAddAuthority(t *testing.T) {
 
 			// add authority
 			tx := new(Transaction)
-			tx.Version = fmt.Sprintf("%d", ProtocolVersion)
+			tx.Version = ProtocolVersion
 			tx.Epoch = 1
 			tx.Command = AddNewAuthority
 			tx.Payload = string(rawAuth)
@@ -96,7 +100,7 @@ func TestAddAuthority(t *testing.T) {
 			}
 
 			m.App.BeginBlock(abcitypes.RequestBeginBlock{})
-			res, err := m.BroadcastTxCommit(context.Background(), types.Tx(encTx))
+			res, err := m.BroadcastTxCommit(context.Background(), encTx)
 			require.Nil(err)
 			assert.True(res.CheckTx.IsOK())
 			require.NotNil(res.DeliverTx)
@@ -104,9 +108,8 @@ func TestAddAuthority(t *testing.T) {
 
 			m.App.Commit()
 
-			key := app.state.storageKey([]byte(authoritiesBucket), string(authority.IdentityKey.Bytes()), 0)
-			rtx := app.state.NewTransaction(false)
-			_, err = rtx.Get(key)
+			key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
+			_, err = app.state.Get(key)
 			if err != nil {
 				t.Fatalf("Failed to get authority from database: %+v\n", err)
 			}
@@ -115,4 +118,83 @@ func TestAddAuthority(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestPostDocument(t *testing.T) {
+	assert, require := assert.New(t), require.New(t)
+
+	// setup application
+	db := dbm.NewMemDB()
+	defer db.Close()
+	app := NewKatzenmintApplication(db)
+	m := mock.ABCIApp{
+		App: app,
+	}
+
+	// fetch current epoch
+	appinfo, err := m.ABCIInfo(context.Background())
+	require.Nil(err)
+	epochBytes := DecodeHex(appinfo.Response.Data)
+	epoch, err := binary.ReadUvarint(bytes.NewReader(epochBytes))
+	require.Nil(err)
+
+	// Create transaction
+	_, sDoc := testutil.CreateTestDocument(require, epoch)
+	rawTx := Transaction{
+		Version: ProtocolVersion,
+		Epoch:   epoch,
+		Command: AddConsensusDocument,
+		Payload: string(sDoc),
+	}
+	_, privKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(err, "GenerateKey()")
+	rawTx.AppendSignature(privKey)
+	tx, err := json.Marshal(rawTx)
+	require.NoError(err, "Marshal raw transaction")
+
+	// run app
+	m.App.BeginBlock(abcitypes.RequestBeginBlock{})
+	res, err := m.BroadcastTxCommit(context.Background(), tx)
+	require.Nil(err)
+	assert.True(res.CheckTx.IsOK())
+	require.NotNil(res.DeliverTx)
+	assert.True(res.DeliverTx.IsOK())
+	m.App.Commit()
+
+	// test the data exists in state
+	loaded, _, err := app.state.documentForEpoch(epoch)
+	require.Nil(err, "Failed to get pki document from state: %+v\n", err)
+	require.NotNil(loaded, "Failed to get pki document from state: wrong key")
+	require.Equal(sDoc, loaded, "App state contains an erroneous pki document")
+
+	// make a query
+	var data []byte
+	query := Query{
+		Version: ProtocolVersion,
+		Epoch:   epoch,
+		Command: GetConsensus,
+		Payload: "",
+	}
+	err = codec.NewEncoderBytes(&data, jsonHandle).Encode(query)
+	require.Nil(err)
+
+	rsp, err := m.ABCIQuery(context.Background(), "", data)
+	require.Nil(err)
+	require.True(rsp.Response.IsOK(), rsp.Response.Log)
+	require.Equal(sDoc, rsp.Response.Value, "App responses with an erroneous pki document")
+
+	// prepare verification metadata
+	appinfo, err = m.ABCIInfo(context.Background())
+	require.Nil(err)
+	apphash := appinfo.Response.LastBlockAppHash
+	e := make([]byte, 8)
+	binary.PutUvarint(e, epoch)
+	key := storageKey(documentsBucket, e, epoch)
+	path := "/" + url.PathEscape(string(key))
+
+	// verify query proof
+	verifier := merkle.NewProofRuntime()
+	verifier.RegisterOpDecoder(iavl.ProofOpIAVLValue, iavl.ValueOpDecoder)
+	err = verifier.VerifyValue(rsp.Response.ProofOps, apphash, path, rsp.Response.Value)
+	require.Nil(err, "Invalid proof for app responses")
 }

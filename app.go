@@ -221,7 +221,7 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		}
 		resQuery.Key = proof.GetKey()
 		resQuery.Value = doc
-		resQuery.Height = int64(app.state.blockHeight - 1)
+		resQuery.Height = app.state.blockHeight
 		resQuery.ProofOps = &tmcrypto.ProofOps{
 			Ops: []tmcrypto.ProofOp{proof.ProofOp()},
 		}

@@ -292,7 +292,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	return ret, nil
 }
 
-func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.ProofOperator, error) {
+func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]byte, merkle.ProofOperator, error) {
 	// TODO: postpone the document for some blocks?
 	// var postponDeadline = 10
 
@@ -302,7 +302,7 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64) ([]byte, merkle.Pro
 	e := make([]byte, 8)
 	binary.PutUvarint(e, epoch)
 	key := storageKey(documentsBucket, e, epoch)
-	doc, proof, err := state.tree.GetWithProof(key)
+	doc, proof, err := state.tree.GetVersionedWithProof(key, height)
 	if err != nil {
 		return nil, nil, err
 	}

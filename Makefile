@@ -15,8 +15,8 @@ lint:
 # https://github.com/golang/go/issues/40917
 .PHONY: test
 test:
-	go test s11n/*.go 
-	go test -tags=$(GOTAGS) errors.go command.go query.go authority.go util.go encoding*.go transaction*.go state*.go app*.go
+	go test ./s11n
+	go test -tags=$(GOTAGS) ./
 
 
 .PHONY: setup

@@ -211,7 +211,8 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Log = "unsupported query"
 		resQuery.Code = 0x2
 	case GetConsensus:
-		doc, proof, err := app.state.documentForEpoch(kquery.Epoch)
+		resQuery.Height = app.state.blockHeight - 1
+		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
 			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err))
 			resQuery.Log = "document does not exist"
@@ -220,7 +221,6 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		}
 		resQuery.Key = proof.GetKey()
 		resQuery.Value = doc
-		resQuery.Height = int64(app.state.blockHeight - 1)
 		resQuery.ProofOps = &tmcrypto.ProofOps{
 			Ops: []tmcrypto.ProofOp{proof.ProofOp()},
 		}

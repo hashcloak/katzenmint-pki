@@ -32,6 +32,8 @@ type signTransaction struct {
 
 // TODO: find a better way to represent the Transaction
 // maybe add nonce? switch to rlp encoding?
+// Transaction represents a transaction used to make state change, eg:
+// publish mix descriptor, add consensus document or add new authority
 type Transaction struct {
 	// version
 	Version string
@@ -52,7 +54,7 @@ type Transaction struct {
 	Payload string
 }
 
-// SerializeHash return the serialize hash that user signed of the given transaction
+// SerializeHash returns the serialize hash that user signed of the given transaction
 func (tx *Transaction) SerializeHash() (txHash [32]byte) {
 	signTx := new(signTransaction)
 	signTx.Version = tx.Version
@@ -69,6 +71,7 @@ func (tx *Transaction) SerializeHash() (txHash [32]byte) {
 	return
 }
 
+// IsVerified returns whether transaction was signed by the public key
 func (tx *Transaction) IsVerified() (isVerified bool) {
 	msgHash := tx.SerializeHash()
 	if len(msgHash) <= 0 {
@@ -104,7 +107,7 @@ func (tx *Transaction) Address() string {
 	return string(pubkey.Address())
 }
 
-// Appends the public key and a signature to the transaction
+// AppendSignature appends the public key and a signature to the transaction
 func (tx *Transaction) AppendSignature(privKey ed25519.PrivateKey) {
 	tx.PublicKey = EncodeHex(privKey.Public().(ed25519.PublicKey))
 	msgHash := tx.SerializeHash()

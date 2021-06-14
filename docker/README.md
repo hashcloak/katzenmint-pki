@@ -7,7 +7,7 @@ Before running the test, you should build docker container for katzenmint-pki.
 
 ```BASH
 $ cd katzenmint-pki
-$ docker build --no-catch -t katzenmint/pki .
+$ docker build --no-cache -t katzenmint/pki .
 ```
 
 Then, start three katzenmint pki nodes

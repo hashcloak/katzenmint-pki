@@ -7,34 +7,34 @@ services:
     image: katzenmint/pki
     volumes:
       - ./conf/node1:/chain
-    # ports:
-    #   - "127.0.0.1:21483:21483"
+    ports:
+      - "127.0.0.1:21483:26657"
     networks:
-      testing_net:
-        ipv4_address: 172.29.1.10
+      katzenmint_net:
+        ipv4_address: 172.29.1.7
   auth2:
     restart: unless-stopped
     image: katzenmint/pki
     volumes:
       - ./conf/node2:/chain
-    # ports:
-    #   - "127.0.0.1:22483:22483"
+    ports:
+      - "127.0.0.1:21484:26657"
     networks:
-      testing_net:
+      katzenmint_net:
         ipv4_address: 172.29.1.8
   auth3:
     restart: unless-stopped
     image: katzenmint/pki
     volumes:
       - ./conf/node3:/chain
-    # ports:
-    #   - "127.0.0.1:23483:23483"
+    ports:
+      - "127.0.0.1:21485:26657"
     networks:
-      testing_net:
+      katzenmint_net:
         ipv4_address: 172.29.1.9
 
 networks:
-  testing_net:
+  katzenmint_net:
     ipam:
       driver: default
       config:

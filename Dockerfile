@@ -6,7 +6,7 @@ LABEL authors="Peter Lai: peter@hashcloak.com"
 # Install git & make
 # Git is required for fetching the dependencies
 RUN apk update && \
-    apk add --no-cache git make ca-certificates && \
+    apk add --no-cache git make ca-certificates build-base && \
     update-ca-certificates
 
 # Set the working directory for the container

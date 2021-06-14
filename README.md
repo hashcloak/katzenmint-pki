@@ -21,7 +21,7 @@ $ git checkout v0.34.6
 $ make install
 ```
 2. `TMHOME=`pwd`/chain tendermint init`
-3. `go build`
-4. `./katzenmint_abci_app -config ./chain/config/config.toml`
+3. `make build`
+4. `./katzenmint -config ./chain/config/config.toml`
 5. `curl -s 'localhost:26657/broadcast_tx_commit?tx="tendermint=rocks"'`
 6. `curl -s 'localhost:26657/abci_query?data="tendermint"'`

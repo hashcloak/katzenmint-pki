@@ -16,7 +16,9 @@
 
 # katzenmint
 chain
-data
 testdb
+*.db
+*_db
+data/
 
 .DS_Store

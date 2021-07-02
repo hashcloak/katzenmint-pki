@@ -292,12 +292,23 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	return ret, nil
 }
 
+func (state *KatzenmintState) latestEpoch(height int64) ([]byte, merkle.ProofOperator, error) {
+	key := []byte(epochInfoKey)
+	val, proof, err := state.tree.GetVersionedWithProof(key, height)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(val) != 16 {
+		return nil, nil, fmt.Errorf("error fetching latest epoch for height %v", height)
+	}
+	valueOp := iavl.NewValueOp(key, proof)
+	return val, valueOp, nil
+
+}
+
 func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]byte, merkle.ProofOperator, error) {
 	// TODO: postpone the document for some blocks?
 	// var postponDeadline = 10
-
-	state.RLock()
-	defer state.RUnlock()
 
 	e := make([]byte, 8)
 	binary.PutUvarint(e, epoch)

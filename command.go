@@ -7,4 +7,5 @@ var (
 	AddConsensusDocument Command = 2
 	AddNewAuthority      Command = 3
 	GetConsensus         Command = 4
+	GetEpoch             Command = 5
 )

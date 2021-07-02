@@ -210,13 +210,29 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 	default:
 		resQuery.Log = "unsupported query"
 		resQuery.Code = 0x2
+		return
+	case GetEpoch:
+		resQuery.Height = app.state.blockHeight - 1
+		val, proof, err := app.state.latestEpoch(resQuery.Height)
+		if err != nil {
+			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve epoch for height '%v': %v", resQuery.Height, err))
+			resQuery.Log = fmt.Sprintf("cannot obtain epoch for the current height: %v", err)
+			resQuery.Code = 0x3
+			return
+		}
+		resQuery.Key = proof.GetKey()
+		resQuery.Value = val
+		resQuery.ProofOps = &tmcrypto.ProofOps{
+			Ops: []tmcrypto.ProofOp{proof.ProofOp()},
+		}
+
 	case GetConsensus:
 		resQuery.Height = app.state.blockHeight - 1
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
 			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err))
 			resQuery.Log = "document does not exist"
-			resQuery.Code = 0x3
+			resQuery.Code = 0x4
 			return
 		}
 		resQuery.Key = proof.GetKey()

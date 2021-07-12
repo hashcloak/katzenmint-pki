@@ -116,7 +116,12 @@ func TestAddAuthority(t *testing.T) {
 
 			m.App.Commit()
 
-			key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
+			validator := abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, "")
+			protoPubKey, err := validator.PubKey.Marshal()
+			if err != nil {
+				t.Fatalf("Failed to encode public with protobuf: %v\n", err)
+			}
+			key := storageKey(authoritiesBucket, protoPubKey, 0)
 			_, err = app.state.Get(key)
 			if err != nil {
 				t.Fatalf("Failed to get authority from database: %+v\n", err)

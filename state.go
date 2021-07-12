@@ -151,14 +151,15 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 			panic(fmt.Errorf("unable to unpack storage key %v", key))
 			// return true
 		}
+		// validator := new(abcitypes.ValidatorUpdate)
+		// protoValue := bytes.NewReader(value)
+		// err := abcitypes.ReadMessage(protoValue, validator)
+		// if err != nil {
+		// 	panic(fmt.Errorf("error parsing authority: %v", err))
+		// }
 		auth, err := VerifyAndParseAuthority(value)
 		if err != nil {
 			panic(fmt.Errorf("error parsing authority: %v", err))
-			// return true
-		}
-		if !bytes.Equal(auth.IdentityKey.Bytes(), id) {
-			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.IdentityKey.Bytes()))
-			// return true
 		}
 		var protopk pc.PublicKey
 		err = protopk.Unmarshal(id)
@@ -172,6 +173,10 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 			// return true
 		}
 		state.validators[string(pk.Address())] = protopk
+		if !bytes.Equal(auth.IdentityKey.Bytes(), protopk.GetEd25519()) {
+			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.IdentityKey.Bytes()))
+			// return false
+		}
 		return false
 	})
 
@@ -485,7 +490,11 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	if _, ok := state.validators[string(pubkey.Address())]; ok {
 		return fmt.Errorf("authority had been added")
 	}
-	key := storageKey(authoritiesBucket, pubkey.Bytes(), 0)
+	protoPubKey, err := v.PubKey.Marshal()
+	if err != nil {
+		return err
+	}
+	key := storageKey(authoritiesBucket, protoPubKey, 0)
 
 	if v.Power == 0 {
 		// remove validator
@@ -503,18 +512,22 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 	} else {
 		// TODO: make sure the voting power not exceed 1/3
 		// add or update validator
-		value := bytes.NewBuffer(make([]byte, 0))
-		if err := abcitypes.WriteMessage(&v, value); err != nil {
-			return fmt.Errorf("error encoding validator: %v", err)
-		}
-		if err = state.Set(key, value.Bytes()); err != nil {
-			return err
-		}
-		if rawAuth != nil {
-			// save payload into database
-			if err := state.Set([]byte(key), rawAuth); err != nil {
+		if rawAuth == nil && v.Power > 0 {
+			auth := new(Authority)
+			auth.Auth = "katzenmint"
+			edPubkey := v.PubKey.GetEd25519()
+			auth.IdentityKey = new(eddsa.PublicKey)
+			if err := auth.IdentityKey.FromBytes(edPubkey); err != nil {
 				return err
 			}
+			auth.LinkKey = auth.IdentityKey.ToECDH()
+			auth.Power = v.Power
+			if rawAuth, err = EncodeJson(auth); err != nil {
+				return err
+			}
+		}
+		if err := state.Set([]byte(key), rawAuth); err != nil {
+			return err
 		}
 		state.validators[string(pubkey.Address())] = v.PubKey
 	}

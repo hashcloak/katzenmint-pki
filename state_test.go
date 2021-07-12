@@ -188,7 +188,8 @@ func TestUpdateAuthority(t *testing.T) {
 
 	// update authority
 	state.BeginBlock()
-	err = state.updateAuthority(rawAuth, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
+	validator := abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, "")
+	err = state.updateAuthority(rawAuth, validator)
 	if err != nil {
 		fmt.Printf("Failed to update authority: %+v\n", err)
 		return
@@ -199,7 +200,11 @@ func TestUpdateAuthority(t *testing.T) {
 	}
 
 	// test the data exists in database
-	key := storageKey(authoritiesBucket, authority.IdentityKey.Bytes(), 0)
+	protoPubKey, err := validator.PubKey.Marshal()
+	if err != nil {
+		t.Fatalf("Failed to encode public with protobuf: %v\n", err)
+	}
+	key := storageKey(authoritiesBucket, protoPubKey, 0)
 	_, err = state.Get(key)
 	if err != nil {
 		t.Fatalf("Failed to get authority from database: %+v\n", err)

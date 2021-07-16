@@ -24,4 +24,12 @@ echo "{
   \"round\": 0,
   \"step\": 0
 }" > conf/node3/data/priv_validator_state.json
+
+# Update genesis block time
+NOW=$(TZ=UTC date +"%Y-%m-%dT%H:%M:%S.000000Z")
+TITLE="\"genesis_time\""
+sed -i "s/$TITLE.*/$TITLE: \"$NOW\",/g" conf/node1/config/genesis.json
+sed -i "s/$TITLE.*/$TITLE: \"$NOW\",/g" conf/node2/config/genesis.json
+sed -i "s/$TITLE.*/$TITLE: \"$NOW\",/g" conf/node3/config/genesis.json
+
 echo "Cleaned up!"

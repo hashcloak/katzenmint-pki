@@ -3,8 +3,6 @@ package katzenmint
 import (
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
-	abcitypes "github.com/tendermint/tendermint/abci/types"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/ugorji/go/codec"
 )
 
@@ -23,6 +21,7 @@ type Authority struct {
 	Power int64
 }
 
+/*
 func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 	p := make([]byte, eddsa.PublicKeySize)
 	copy(p, pk[:])
@@ -33,6 +32,7 @@ func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
 	}
 	return string(pubkey.Address())
 }
+*/
 
 func VerifyAndParseAuthority(payload []byte) (*Authority, error) {
 	authority := new(Authority)

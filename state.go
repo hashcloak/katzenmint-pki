@@ -338,9 +338,6 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]by
 }
 
 func (state *KatzenmintState) isAuthorized(addr string) bool {
-	if _, ok := state.validators[addr]; ok {
-		return false
-	}
 	return true
 }
 
@@ -350,24 +347,23 @@ func (state *KatzenmintState) GetAuthorized(addr string) (pc.PublicKey, bool) {
 }
 
 func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
-	pk := desc.IdentityKey.ByteArray()
-
-	switch desc.Layer {
-	// case 0:
-	// 	return state.authorizedMixes[pk]
-	case pki.LayerProvider:
-		// check authorities, should use validator address
-		_, ok := state.validators[bytesToAddress(pk)]
-		return ok
-	default:
-		return false
-	}
+	return true
+	/*
+		pk := desc.IdentityKey.ByteArray()
+		switch desc.Layer {
+		case 0:
+		 	return state.authorizedMixes[pk]
+		case pki.LayerProvider:
+			// check authorities, should use validator address
+			_, ok := state.validators[bytesToAddress(pk)]
+			return ok
+		default:
+			return false
+		}
+	*/
 }
 
 func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
-	if _, ok := state.documents[doc.Epoch]; ok {
-		return true
-	}
 	return true
 }
 

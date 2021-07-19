@@ -23,7 +23,6 @@ var (
 
 	ErrTxDescInvalidVerifier   = KatzenmintError{Msg: "cannot get descriptor verifier", Code: 0x11}
 	ErrTxDescFalseVerification = KatzenmintError{Msg: "cannot verify and parse descriptor", Code: 0x12}
-	ErrTxDescNotSelfSigned     = KatzenmintError{Msg: "descriptor is not self-signed", Code: 0x13}
 
 	ErrTxNonAuthorized   = KatzenmintError{Msg: "non authorized authority", Code: 0x31}
 	ErrTxCommandNotFound = KatzenmintError{Msg: "transaction command not found", Code: 0x32}

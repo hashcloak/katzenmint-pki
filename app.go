@@ -7,8 +7,6 @@ import (
 
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
-	"github.com/katzenpost/core/crypto/eddsa"
-	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -83,21 +81,15 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 	switch tx.Command {
 	case PublishMixDescriptor:
 		var verifier cert.Verifier
-		var desc *pki.MixDescriptor
-		var pubKey *eddsa.PublicKey
 		payload := DecodeHex(tx.Payload)
 		verifier, err = s11n.GetVerifierFromDescriptor(payload)
 		if err != nil {
 			err = ErrTxDescInvalidVerifier
 			return
 		}
-		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		_, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
 		if err != nil {
 			err = ErrTxDescFalseVerification
-			return
-		}
-		if !desc.IdentityKey.Equal(pubKey) {
-			err = ErrTxDescNotSelfSigned
 			return
 		}
 	case AddConsensusDocument:
@@ -121,7 +113,7 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		payload := []byte(tx.Payload)
+		payload := DecodeHex(tx.Payload)
 		desc, err := s11n.ParseDescriptorWithoutVerify(payload)
 		if err != nil {
 			return err

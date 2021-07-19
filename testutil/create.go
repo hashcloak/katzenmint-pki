@@ -12,7 +12,7 @@ import (
 )
 
 // create test descriptor
-func CreateTestDescriptor(require *require.Assertions, idx int, layer int, epoch uint64) (*pki.MixDescriptor, []byte) {
+func CreateTestDescriptor(require *require.Assertions, idx int, layer int, epoch uint64) (*pki.MixDescriptor, []byte, eddsa.PrivateKey) {
 	desc := new(pki.MixDescriptor)
 	desc.Name = fmt.Sprintf("katzenmint%d.example.net", idx)
 	desc.Addresses = map[pki.Transport][]string{
@@ -48,7 +48,7 @@ func CreateTestDescriptor(require *require.Assertions, idx int, layer int, epoch
 	// Sign the descriptor.
 	signed, err := s11n.SignDescriptor(identityPriv, desc)
 	require.NoError(err, "SignDescriptor()")
-	return desc, signed
+	return desc, signed, *identityPriv
 }
 
 // create test document
@@ -66,13 +66,13 @@ func CreateTestDocument(require *require.Assertions, epoch uint64) (*s11n.Docume
 	idx := 1
 	for l := 0; l < 3; l++ {
 		for i := 0; i < 5; i++ {
-			_, rawDesc := CreateTestDescriptor(require, idx, 0, epoch)
+			_, rawDesc, _ := CreateTestDescriptor(require, idx, 0, epoch)
 			doc.Topology[l] = append(doc.Topology[l], rawDesc)
 			idx++
 		}
 	}
 	for i := 0; i < 3; i++ {
-		_, rawDesc := CreateTestDescriptor(require, idx, pki.LayerProvider, epoch)
+		_, rawDesc, _ := CreateTestDescriptor(require, idx, pki.LayerProvider, epoch)
 		doc.Providers = append(doc.Providers, rawDesc)
 		idx++
 	}

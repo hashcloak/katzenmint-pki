@@ -85,7 +85,7 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 		var verifier cert.Verifier
 		var desc *pki.MixDescriptor
 		var pubKey *eddsa.PublicKey
-		payload := []byte(tx.Payload)
+		payload := DecodeHex(tx.Payload)
 		verifier, err = s11n.GetVerifierFromDescriptor(payload)
 		if err != nil {
 			err = ErrTxDescInvalidVerifier
@@ -170,7 +170,7 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
 	tx, err := app.isTxValid(req.Tx)
 	if err != nil {
-		return abcitypes.ResponseDeliverTx{Code: err.(KatzenmintError).Code}
+		return abcitypes.ResponseDeliverTx{Code: err.(KatzenmintError).Code, Log: err.(KatzenmintError).Msg}
 	}
 	err = app.executeTx(tx)
 	if err != nil {
@@ -183,7 +183,7 @@ func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abci
 func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
 	_, err := app.isTxValid(req.Tx)
 	if err != nil {
-		return abcitypes.ResponseCheckTx{Code: err.(KatzenmintError).Code, GasWanted: 1}
+		return abcitypes.ResponseCheckTx{Code: err.(KatzenmintError).Code, Log: err.(KatzenmintError).Msg, GasWanted: 1}
 	}
 	return abcitypes.ResponseCheckTx{Code: abcitypes.CodeTypeOK, GasWanted: 1}
 }

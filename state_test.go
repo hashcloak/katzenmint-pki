@@ -52,7 +52,7 @@ func TestUpdateDescriptor(t *testing.T) {
 	state := NewKatzenmintState(db)
 
 	// create test descriptor
-	desc, rawDesc := testutil.CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
+	desc, rawDesc, _ := testutil.CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
 
 	// update test descriptor
 	state.BeginBlock()
@@ -230,7 +230,7 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	// create descriptorosts of providers
 	providers := make([]descriptor, 0)
 	for i := 0; i < state.minNodesPerLayer; i++ {
-		desc, rawDesc := testutil.CreateTestDescriptor(require, i, pki.LayerProvider, epoch)
+		desc, rawDesc, _ := testutil.CreateTestDescriptor(require, i, pki.LayerProvider, epoch)
 		providers = append(providers, descriptor{desc: desc, raw: rawDesc})
 	}
 
@@ -238,7 +238,7 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	mixs := make([]descriptor, 0)
 	for layer := 0; layer < state.layers; layer++ {
 		for i := 0; i < state.minNodesPerLayer; i++ {
-			desc, rawDesc := testutil.CreateTestDescriptor(require, i, 0, epoch)
+			desc, rawDesc, _ := testutil.CreateTestDescriptor(require, i, 0, epoch)
 			mixs = append(mixs, descriptor{desc: desc, raw: rawDesc})
 		}
 	}

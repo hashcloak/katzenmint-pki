@@ -59,7 +59,7 @@ func TestAddAuthority(t *testing.T) {
 			}(node.DBPath)
 
 			logger := newDiscardLogger()
-			app := NewKatzenmintApplication(db, logger)
+			app := NewKatzenmintApplication(kConfig, db, logger)
 			m := mock.ABCIApp{
 				App: app,
 			}
@@ -140,7 +140,7 @@ func TestPostDocument(t *testing.T) {
 	db := dbm.NewMemDB()
 	defer db.Close()
 	logger := newDiscardLogger()
-	app := NewKatzenmintApplication(db, logger)
+	app := NewKatzenmintApplication(kConfig, db, logger)
 	m := mock.ABCIApp{
 		App: app,
 	}

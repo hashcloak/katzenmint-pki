@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/hashcloak/katzenmint-pki/testutil"
 	"github.com/katzenpost/core/crypto/ecdh"
@@ -22,13 +23,19 @@ import (
 
 const testEpoch = genesisEpoch
 
+var kConfig *config.Config
+
+func init() {
+	kConfig = config.DefaultConfig()
+}
+
 func TestNewStateBasic(t *testing.T) {
 	require := require.New(t)
 
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
-	state := NewKatzenmintState(db)
+	state := NewKatzenmintState(kConfig, db)
 
 	// advance block height
 	require.Equal(int64(0), state.blockHeight)
@@ -37,7 +44,7 @@ func TestNewStateBasic(t *testing.T) {
 	require.Equal(int64(1), state.blockHeight)
 
 	// test that basic state info can be rebuilt
-	state = NewKatzenmintState(db)
+	state = NewKatzenmintState(kConfig, db)
 	require.Equal(int64(1), state.blockHeight)
 	require.Equal(genesisEpoch, state.currentEpoch)
 	require.Equal(int64(0), state.epochStartHeight)
@@ -49,7 +56,7 @@ func TestUpdateDescriptor(t *testing.T) {
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
-	state := NewKatzenmintState(db)
+	state := NewKatzenmintState(kConfig, db)
 
 	// create test descriptor
 	desc, rawDesc, _ := testutil.CreateTestDescriptor(require, 1, pki.LayerProvider, testEpoch)
@@ -90,7 +97,7 @@ func TestUpdateDescriptor(t *testing.T) {
 	}
 
 	// test the data can be reloaded into memory
-	state = NewKatzenmintState(db)
+	state = NewKatzenmintState(kConfig, db)
 	if m, ok := state.descriptors[testEpoch]; !ok {
 		t.Fatal("Failed to reload mix descriptor into memory\n")
 	} else {
@@ -110,7 +117,7 @@ func TestUpdateDocument(t *testing.T) {
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
-	state := NewKatzenmintState(db)
+	state := NewKatzenmintState(kConfig, db)
 
 	// create, validate and deserialize document
 	_, sDoc := testutil.CreateTestDocument(require, testEpoch)
@@ -152,7 +159,7 @@ func TestUpdateDocument(t *testing.T) {
 	}
 
 	// test the data can be reloaded into memory
-	state = NewKatzenmintState(db)
+	state = NewKatzenmintState(kConfig, db)
 	gotDoc, ok = state.documents[testEpoch]
 	if !ok {
 		t.Fatal("Failed to reload pki document into memory\n")
@@ -168,7 +175,7 @@ func TestUpdateAuthority(t *testing.T) {
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
-	state := NewKatzenmintState(db)
+	state := NewKatzenmintState(kConfig, db)
 
 	// create authority
 	authority := new(Authority)
@@ -221,7 +228,7 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	// create katzenmint state
 	db := dbm.NewMemDB()
 	defer db.Close()
-	state := NewKatzenmintState(db)
+	state := NewKatzenmintState(kConfig, db)
 	epoch := state.currentEpoch
 	e := make([]byte, 8)
 	binary.PutUvarint(e, epoch)
@@ -306,7 +313,7 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	}
 
 	// test the document can be reloaded
-	state = NewKatzenmintState(db)
+	state = NewKatzenmintState(kConfig, db)
 	got, ok := state.documents[epoch]
 	if !ok {
 		t.Fatalf("The pki document should be reloaded\n")

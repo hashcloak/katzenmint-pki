@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	katzenmint "github.com/hashcloak/katzenmint-pki"
+	kcfg "github.com/hashcloak/katzenmint-pki/config"
 	"github.com/spf13/viper"
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
@@ -24,10 +25,9 @@ import (
 
 var (
 	configFile string
-	dbPath     string
 )
 
-func readConfig() (config *cfg.Config, err error) {
+func readConfig(configFile string) (config *cfg.Config, err error) {
 	config = cfg.DefaultConfig()
 	config.RootDir = filepath.Dir(filepath.Dir(configFile))
 	viper.SetConfigFile(configFile)
@@ -78,21 +78,22 @@ func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) 
 }
 
 func init() {
-	flag.StringVar(&configFile, "config", "$HOME/.tendermint/config/config.toml", "Path to config.toml")
-	flag.StringVar(&dbPath, "db", "", "Path to katzenmint database")
+	flag.StringVar(&configFile, "config", "katzenmint.toml", "Path to katzenmint.toml")
 	flag.Parse()
 }
 
 func main() {
-	if len(dbPath) == 0 {
-		dbPath = filepath.Join(os.TempDir(), "katzenmint")
-	}
-	config, err := readConfig()
+	kConfig, err := kcfg.LoadFile(configFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
 	}
-	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, dbPath)
+	config, err := readConfig(kConfig.TendermintConfigPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+	db, err := dbm.NewDB("katzenmint_db", dbm.BadgerDBBackend, kConfig.DBPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open badger db: %v\ntry running with -tags badgerdb\n", err)
 		os.Exit(1)
@@ -105,7 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := katzenmint.NewKatzenmintApplication(db, logger)
+	app := katzenmint.NewKatzenmintApplication(kConfig, db, logger)
 	node, err := newTendermint(app, config, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -30,8 +31,8 @@ type KatzenmintApplication struct {
 	logger log.Logger
 }
 
-func NewKatzenmintApplication(db dbm.DB, logger log.Logger) *KatzenmintApplication {
-	state := NewKatzenmintState(db)
+func NewKatzenmintApplication(kConfig *config.Config, db dbm.DB, logger log.Logger) *KatzenmintApplication {
+	state := NewKatzenmintState(kConfig, db)
 	return &KatzenmintApplication{
 		state:  state,
 		logger: logger,

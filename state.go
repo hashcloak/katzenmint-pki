@@ -53,7 +53,7 @@ type KatzenmintState struct {
 	deferCommit []func()
 }
 
-func NewKatzenmintState(db dbm.DB) *KatzenmintState {
+func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	// TODO: should load the current state from database
 	tree, err := iavl.NewMutableTree(db, 100)
 	if err != nil {
@@ -67,9 +67,9 @@ func NewKatzenmintState(db dbm.DB) *KatzenmintState {
 		appHash:          tree.Hash(),
 		blockHeight:      version,
 		tree:             tree,
-		layers:           config.DefaultLayers,
-		minNodesPerLayer: config.DefaultMinNodesPerLayer,
-		parameters:       &config.DefaultParameters,
+		layers:           kConfig.Layers,
+		minNodesPerLayer: kConfig.MinNodesPerLayer,
+		parameters:       &kConfig.Parameters,
 		documents:        make(map[uint64]*document),
 		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
 		validators:       make(map[string]pc.PublicKey),

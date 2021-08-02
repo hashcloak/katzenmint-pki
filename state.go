@@ -96,15 +96,12 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	_ = tree.IterateRange([]byte(documentsBucket), end, true, func(key, value []byte) bool {
 		id, epoch := unpackStorageKey(key)
 		if id == nil {
-			panic(fmt.Errorf("unable to unpack storage key %v", key))
-			// return true
+			// panic(fmt.Errorf("unable to unpack storage key %v", key))
+			return true
 		}
-		doc, err := s11n.VerifyAndParseDocument(value)
-		if err != nil {
-			panic(fmt.Errorf("error parsing document: %v", err))
-			// return true
+		if doc, err := s11n.VerifyAndParseDocument(value); err == nil {
+			state.documents[epoch] = &document{doc: doc, raw: value}
 		}
-		state.documents[epoch] = &document{doc: doc, raw: value}
 		return false
 	})
 
@@ -115,29 +112,25 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	_ = tree.IterateRange([]byte(descriptorsBucket), end, true, func(key, value []byte) bool {
 		id, epoch := unpackStorageKey(key)
 		if id == nil {
-			panic(fmt.Errorf("unable to unpack storage key %v", key))
-			// return true
+			// panic(fmt.Errorf("unable to unpack storage key %v", key))
+			return true
 		}
 		verifier, err := s11n.GetVerifierFromDescriptor(value)
-		if err != nil {
-			panic(fmt.Errorf("error getting descriptor signer: %v", err))
-			// return true
+		if err == nil {
+			if !bytes.Equal(verifier.Identity(), id) {
+				// panic(fmt.Errorf("storage key id %v has another descriptor id %v", id, verifier.Identity()))
+				return true
+			}
+			desc, err := s11n.VerifyAndParseDescriptor(verifier, value, epoch)
+			if err == nil {
+				var pubkey [32]byte
+				copy(pubkey[:], id)
+				if _, ok := state.descriptors[epoch]; !ok {
+					state.descriptors[epoch] = make(map[[32]byte]*descriptor)
+				}
+				state.descriptors[epoch][pubkey] = &descriptor{desc: desc, raw: value}
+			}
 		}
-		if !bytes.Equal(verifier.Identity(), id) {
-			panic(fmt.Errorf("storage key id %v has another descriptor id %v", id, verifier.Identity()))
-			// return true
-		}
-		desc, err := s11n.VerifyAndParseDescriptor(verifier, value, epoch)
-		if err != nil {
-			panic(fmt.Errorf("error parsing descriptor: %v", err))
-			// return true
-		}
-		var pubkey [32]byte
-		copy(pubkey[:], id)
-		if _, ok := state.descriptors[epoch]; !ok {
-			state.descriptors[epoch] = make(map[[32]byte]*descriptor)
-		}
-		state.descriptors[epoch][pubkey] = &descriptor{desc: desc, raw: value}
 		return false
 	})
 
@@ -148,24 +141,19 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	_ = tree.IterateRange([]byte(authoritiesBucket), end, true, func(key, value []byte) bool {
 		id, _ := unpackStorageKey(key)
 		if id == nil {
-			panic(fmt.Errorf("unable to unpack storage key %v", key))
-			// return true
+			// panic(fmt.Errorf("unable to unpack storage key %v", key))
+			return true
 		}
-		// validator := new(abcitypes.ValidatorUpdate)
-		// protoValue := bytes.NewReader(value)
-		// err := abcitypes.ReadMessage(protoValue, validator)
-		// if err != nil {
-		// 	panic(fmt.Errorf("error parsing authority: %v", err))
-		// }
 		auth, err := VerifyAndParseAuthority(value)
 		if err != nil {
-			panic(fmt.Errorf("error parsing authority: %v", err))
+			// panic(fmt.Errorf("error parsing authority: %v", err))
+			return true
 		}
 		var protopk pc.PublicKey
 		err = protopk.Unmarshal(id)
 		if err != nil {
-			panic(fmt.Errorf("error unmarshal proto: %v", err))
-			// return true
+			// panic(fmt.Errorf("error unmarshal proto: %v", err))
+			return true
 		}
 		pk, err := cryptoenc.PubKeyFromProto(protopk)
 		if err != nil {

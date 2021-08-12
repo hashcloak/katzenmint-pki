@@ -1,6 +1,7 @@
 # /bin/sh
 
 echo "Clean up data generated when execute scripts..."
+rm -rf conf/node1/kdata/*
 rm -rf conf/node1/data/*
 rm -rf conf/node1/katzenmint
 echo "{
@@ -9,6 +10,7 @@ echo "{
   \"step\": 0
 }" > conf/node1/data/priv_validator_state.json
 
+rm -rf conf/node2/kdata/*
 rm -rf conf/node2/data/*
 rm -rf conf/node2/katzenmint
 echo "{
@@ -17,6 +19,7 @@ echo "{
   \"step\": 0
 }" > conf/node2/data/priv_validator_state.json
 
+rm -rf conf/node3/kdata/*
 rm -rf conf/node3/data/*
 rm -rf conf/node3/katzenmint
 echo "{

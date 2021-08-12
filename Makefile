@@ -26,3 +26,7 @@ setup:
 .PHONY: build
 build:
 	go build -tags=$(GOTAGS) -o katzenmint cmd/katzenmint.go
+
+.PHONY: docker-build
+docker-build:
+	docker build --no-cache -t katzenmint/pki .

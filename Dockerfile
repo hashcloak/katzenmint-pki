@@ -31,4 +31,4 @@ COPY --from=builder /go/katzenmint-pki/katzenmint /go/bin/katzenmint
 VOLUME /chain
 
 # This form of ENTRYPOINT allows the process to catch signals from the `docker stop` command
-ENTRYPOINT /go/bin/katzenmint -config /chain/config/config.toml -db /chain/katzenmint
+ENTRYPOINT /go/bin/katzenmint -config /chain/katzenmint.toml

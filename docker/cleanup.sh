@@ -28,6 +28,12 @@ echo "{
   \"step\": 0
 }" > conf/node3/data/priv_validator_state.json
 
+rm -rf conf/mix1/data/*
+rm -rf conf/mix2/data/*
+rm -rf conf/mix3/data/*
+rm -rf conf/provider1/data/*
+rm -rf conf/provider2/data/*
+
 # Update genesis block time
 NOW=$(TZ=UTC date +"%Y-%m-%dT%H:%M:%S.000000Z")
 TITLE="\"genesis_time\""

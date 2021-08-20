@@ -1,9 +1,13 @@
 # /bin/ash
+
 echo ""
 echo "Update Voting TrustOptions..."
 echo ""
 
-/go/bin/updateconfig -f /conf/katzenpost.toml
+until /go/bin/updateconfig -f /conf/katzenpost.toml; do
+  >&2 echo "Katzenmint is unavailable - sleeping 1 second"
+  sleep 1
+done
 
 echo ""
 echo "Start Meson Server"

@@ -183,7 +183,10 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 
 // TODO: should update the validators map after commit
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
-	appHash, _ := app.state.Commit()
+	appHash, err := app.state.Commit()
+	if err != nil {
+		app.logger.Error(fmt.Sprintf("Commit failed: %+v\n", err))
+	}
 	return abcitypes.ResponseCommit{Data: appHash}
 }
 

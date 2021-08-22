@@ -6,8 +6,9 @@ package katzenmint
 import (
 	"bytes"
 	"encoding/binary"
+	"math/rand"
+	"sort"
 
-	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/core/sphinx/constants"
 )
@@ -48,6 +49,14 @@ func unpackStorageKey(key []byte) (keyID []byte, epoch uint64) {
 	return
 }
 
+func sortNodesByPublicKey(nodes []*descriptor) {
+	dTos := func(d *descriptor) string {
+		pk := d.desc.IdentityKey.ByteArray()
+		return string(pk[:])
+	}
+	sort.Slice(nodes, func(i, j int) bool { return dTos(nodes[i]) < dTos(nodes[j]) })
+}
+
 func generateTopology(nodeList []*descriptor, doc *pki.Document, layers int) [][][]byte {
 	nodeMap := make(map[[constants.NodeIDLength]byte]*descriptor)
 	for _, v := range nodeList {
@@ -60,7 +69,7 @@ func generateTopology(nodeList []*descriptor, doc *pki.Document, layers int) [][
 	// approximately equal, and as many nodes as possible retain their existing
 	// layer assignment to minimise network churn.
 
-	rng := rand.NewMath()
+	rng := rand.New(rand.NewSource(0))
 	targetNodesPerLayer := len(nodeList) / layers
 	topology := make([][][]byte, layers)
 
@@ -119,7 +128,7 @@ func generateRandomTopology(nodes []*descriptor, layers int) [][][]byte {
 	// then the simplest thing to do is to randomly assign nodes to the
 	// various layers.
 
-	rng := rand.NewMath()
+	rng := rand.New(rand.NewSource(0))
 	nodeIndexes := rng.Perm(len(nodes))
 	topology := make([][][]byte, layers)
 	for idx, layer := 0, 0; idx < len(nodes); idx++ {

@@ -21,4 +21,7 @@ testdb
 *_db
 data/
 
+# docker genesis documents
+docker/conf/node*/config/genesis.json
+
 .DS_Store

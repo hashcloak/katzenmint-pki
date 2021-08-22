@@ -222,25 +222,35 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Cannot lock here
 
 	// Carve out the descriptors between providers and nodes.
-	var providers [][]byte
-	var nodes []*descriptor
+	var providersDesc, nodes []*descriptor
 	for _, v := range s.descriptors[s.currentEpoch] {
 		if v.desc.Layer == pki.LayerProvider {
-			providers = append(providers, v.raw)
+			providersDesc = append(providersDesc, v)
 		} else {
 			nodes = append(nodes, v)
 		}
 	}
 
-	// Assign nodes to layers.
+	// Assign nodes to layers. # No randomness yet.
 	var topology [][][]byte
 	if len(nodes) < s.layers*s.minNodesPerLayer {
 		return nil, fmt.Errorf("insufficient descriptors uploaded")
 	}
+	sortNodesByPublicKey(nodes)
 	if d, ok := s.documents[s.currentEpoch-1]; ok {
 		topology = generateTopology(nodes, d.doc, s.layers)
 	} else {
 		topology = generateRandomTopology(nodes, s.layers)
+	}
+
+	// Sort the providers
+	var providers [][]byte
+	if len(providersDesc) == 0 {
+		return nil, fmt.Errorf("no providers uploaded")
+	}
+	sortNodesByPublicKey(providersDesc)
+	for _, v := range providersDesc {
+		providers = append(providers, v.raw)
 	}
 
 	// Build the Document.

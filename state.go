@@ -189,6 +189,7 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 		state.deferCommit = make([]func(), 0)
 	}
 	state.blockHeight++
+	currentEpoch := state.currentEpoch
 	if state.newDocumentRequired() {
 		var doc *document
 		if doc, errDoc = state.generateDocument(); errDoc == nil {
@@ -201,7 +202,7 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 		}
 	}
 	epochInfoValue := make([]byte, 16)
-	binary.PutUvarint(epochInfoValue[:8], state.currentEpoch)
+	binary.PutUvarint(epochInfoValue[:8], currentEpoch)
 	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
 	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
 	appHash, _, err := state.tree.SaveVersion()

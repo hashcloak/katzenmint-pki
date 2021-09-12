@@ -8,6 +8,7 @@ import (
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -185,7 +186,7 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 	appHash, err := app.state.Commit()
 	if err != nil {
-		app.logger.Error("commit failed", "error", err)
+		app.logger.Error("commit failed", "epoch", app.state.currentEpoch, "error", err)
 	}
 	return abcitypes.ResponseCommit{Data: appHash}
 }
@@ -226,9 +227,12 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Height = app.state.blockHeight - 1
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
-			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "error", err)
-			resQuery.Log = "document does not exist"
+			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "current", app.state.currentEpoch, "error", err)
+			resQuery.Log = fmt.Sprintf("document does not exist: %v", err)
 			resQuery.Code = 0x4
+			if err == pki.ErrNoDocument {
+				resQuery.Code = 0x5
+			}
 			return
 		}
 		resQuery.Key = proof.GetKey()

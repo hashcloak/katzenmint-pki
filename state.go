@@ -12,7 +12,6 @@ import (
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	katvoting "github.com/katzenpost/authority/voting/server/config"
 	"github.com/katzenpost/core/crypto/eddsa"
-	"github.com/katzenpost/core/epochtime"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -340,12 +339,10 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]by
 		return nil, nil, err
 	}
 	if doc == nil {
-		// TODO: replace how we get `now`
-		now, _, _ := epochtime.Now()
-		if epoch <= now {
-			return nil, nil, fmt.Errorf("document for epoch %d was not generated and will never exist", epoch)
+		if epoch < state.currentEpoch {
+			return nil, nil, pki.ErrNoDocument
 		}
-		if epoch > now+1 {
+		if epoch > state.currentEpoch {
 			return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
 		}
 		return nil, nil, fmt.Errorf("document for epoch %d is not ready yet", epoch)

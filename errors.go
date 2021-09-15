@@ -2,13 +2,15 @@ package katzenmint
 
 import (
 	"fmt"
+
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type KatzenmintError struct {
 	error
 
-	Msg  string
 	Code uint32
+	Msg  string
 }
 
 func (err KatzenmintError) Error() string {
@@ -16,14 +18,28 @@ func (err KatzenmintError) Error() string {
 }
 
 var (
-	ErrTxIsNotValidJSON     = KatzenmintError{Msg: "transaction is not valid json string", Code: 0x01}
-	ErrTxWrongPublicKeySize = KatzenmintError{Msg: "wrong public key size in transaction", Code: 0x02}
-	ErrTxWrongSignatureSize = KatzenmintError{Msg: "wrong public key size in transaction", Code: 0x03}
-	ErrTxWrongSignature     = KatzenmintError{Msg: "wrong signature in transaction", Code: 0x04}
+	// Transaction Common Errors
+	ErrTxIsNotValidJSON     = KatzenmintError{Code: 0x01, Msg: "transaction is not valid json string"}
+	ErrTxWrongPublicKeySize = KatzenmintError{Code: 0x02, Msg: "wrong public key size in transaction"}
+	ErrTxWrongSignatureSize = KatzenmintError{Code: 0x03, Msg: "wrong public key size in transaction"}
+	ErrTxWrongSignature     = KatzenmintError{Code: 0x04, Msg: "wrong signature in transaction"}
 
-	ErrTxDescInvalidVerifier   = KatzenmintError{Msg: "cannot get descriptor verifier", Code: 0x11}
-	ErrTxDescFalseVerification = KatzenmintError{Msg: "cannot verify and parse descriptor", Code: 0x12}
+	// Transaction Specific Errors
+	ErrTxDescInvalidVerifier   = KatzenmintError{Code: 0x11, Msg: "cannot get descriptor verifier"}
+	ErrTxDescFalseVerification = KatzenmintError{Code: 0x12, Msg: "cannot verify and parse descriptor"}
+	ErrTxNonAuthorized         = KatzenmintError{Code: 0x13, Msg: "non authorized authority"}
+	ErrTxCommandNotFound       = KatzenmintError{Code: 0x14, Msg: "transaction command not found"}
 
-	ErrTxNonAuthorized   = KatzenmintError{Msg: "non authorized authority", Code: 0x31}
-	ErrTxCommandNotFound = KatzenmintError{Msg: "transaction command not found", Code: 0x32}
+	// Query Errors
+	ErrQueryInvalidFormat    = KatzenmintError{Code: 0x21, Msg: "error query format"}
+	ErrQueryUnsupported      = KatzenmintError{Code: 0x22, Msg: "unsupported query"}
+	ErrQueryEpochFailed      = KatzenmintError{Code: 0x23, Msg: "cannot obtain epoch for the current height"}
+	ErrQueryNoDocument       = KatzenmintError{Code: 0x24, Msg: "requested epoch has passed and will never get a document"}
+	ErrQueryDocumentNotReady = KatzenmintError{Code: 0x25, Msg: "document for requested epoch is not ready yet"}
+	ErrQueryDocumentUnknown  = KatzenmintError{Code: 0x26, Msg: "unknown failure for document query"}
 )
+
+func parseErrorResponse(err KatzenmintError, resp *abcitypes.ResponseQuery) {
+	resp.Code = err.Code
+	resp.Log = err.Msg
+}

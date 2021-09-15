@@ -340,12 +340,12 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]by
 	}
 	if doc == nil {
 		if epoch < state.currentEpoch {
-			return nil, nil, pki.ErrNoDocument
+			return nil, nil, ErrQueryNoDocument
 		}
-		if epoch > state.currentEpoch {
-			return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
+		if epoch == state.currentEpoch {
+			return nil, nil, ErrQueryDocumentNotReady
 		}
-		return nil, nil, fmt.Errorf("document for epoch %d is not ready yet", epoch)
+		return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
 	}
 	valueOp := iavl.NewValueOp(key, proof)
 	return doc, valueOp, nil

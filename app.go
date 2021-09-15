@@ -8,7 +8,6 @@ import (
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
-	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -191,30 +190,25 @@ func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 	return abcitypes.ResponseCommit{Data: appHash}
 }
 
-// Note, no proof is included here
-// TODO: include merkle proof?
 func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 
 	kquery := new(Query)
 	dec := codec.NewDecoderBytes(rquery.Data, jsonHandle)
 	if err := dec.Decode(kquery); err != nil {
-		resQuery.Log = "error query format"
-		resQuery.Code = 0x1
+		parseErrorResponse(ErrQueryInvalidFormat, &resQuery)
 		return
 	}
 
 	switch kquery.Command {
 	default:
-		resQuery.Log = "unsupported query"
-		resQuery.Code = 0x2
+		parseErrorResponse(ErrQueryUnsupported, &resQuery)
 		return
 	case GetEpoch:
 		resQuery.Height = app.state.blockHeight - 1
 		val, proof, err := app.state.latestEpoch(resQuery.Height)
 		if err != nil {
 			app.logger.Error("peer: failed to retrieve epoch for height", "height", resQuery.Height, "error", err)
-			resQuery.Log = fmt.Sprintf("cannot obtain epoch for the current height: %v", err)
-			resQuery.Code = 0x3
+			parseErrorResponse(ErrQueryEpochFailed, &resQuery)
 			return
 		}
 		resQuery.Key = proof.GetKey()
@@ -228,10 +222,10 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
 			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "current", app.state.currentEpoch, "error", err)
-			resQuery.Log = fmt.Sprintf("document does not exist: %v", err)
-			resQuery.Code = 0x4
-			if err == pki.ErrNoDocument {
-				resQuery.Code = 0x5
+			if err == ErrQueryNoDocument || err == ErrQueryDocumentNotReady {
+				parseErrorResponse(err.(KatzenmintError), &resQuery)
+			} else {
+				parseErrorResponse(ErrQueryDocumentUnknown, &resQuery)
 			}
 			return
 		}

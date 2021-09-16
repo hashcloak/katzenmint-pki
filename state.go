@@ -351,7 +351,7 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]by
 	return doc, valueOp, nil
 }
 
-func (state *KatzenmintState) isAuthorized(addr string) bool {
+func (state *KatzenmintState) isAuthorityAuthorized(addr string) bool {
 	return true
 }
 

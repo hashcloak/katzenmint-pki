@@ -185,7 +185,7 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 	appHash, err := app.state.Commit()
 	if err != nil {
-		app.logger.Error(fmt.Sprintf("Commit failed: %+v\n", err))
+		app.logger.Error("commit failed", "error", err)
 	}
 	return abcitypes.ResponseCommit{Data: appHash}
 }
@@ -211,7 +211,7 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Height = app.state.blockHeight - 1
 		val, proof, err := app.state.latestEpoch(resQuery.Height)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve epoch for height '%v': %v", resQuery.Height, err))
+			app.logger.Error("peer: failed to retrieve epoch for height", "height", resQuery.Height, "error", err)
 			resQuery.Log = fmt.Sprintf("cannot obtain epoch for the current height: %v", err)
 			resQuery.Code = 0x3
 			return
@@ -226,7 +226,7 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Height = app.state.blockHeight - 1
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Peer: Failed to retrieve document for epoch '%v': %v", kquery.Epoch, err))
+			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "error", err)
 			resQuery.Log = "document does not exist"
 			resQuery.Code = 0x4
 			return
@@ -244,7 +244,7 @@ func (app *KatzenmintApplication) InitChain(req abcitypes.RequestInitChain) abci
 	for _, v := range req.Validators {
 		err := app.state.updateAuthority(nil, v)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Error updating validators: %+v\n", err))
+			app.logger.Error("failed to update validators", "error", err)
 		}
 	}
 	return abcitypes.ResponseInitChain{}
@@ -263,9 +263,9 @@ func (app *KatzenmintApplication) BeginBlock(req abcitypes.RequestBeginBlock) ab
 					PubKey: pubKey,
 					Power:  ev.Validator.Power - 1,
 				})
-				app.logger.Error(fmt.Sprintf("Decreased val power by 1 because of the equivocation: %s\n", addr))
+				app.logger.Error("decreased val power by 1 because of the equivocation", "address", addr)
 			} else {
-				app.logger.Error(fmt.Sprintf("Wanted to punish val, but can't find it: %s \n", addr))
+				app.logger.Error("wanted to punish val, but can't find it", "address", addr)
 			}
 		}
 	}

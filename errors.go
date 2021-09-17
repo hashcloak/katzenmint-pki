@@ -29,14 +29,14 @@ var (
 	ErrTxDescFalseVerification  = KatzenmintError{Code: 0x12, Msg: "cannot verify and parse descriptor"}
 	ErrTxDescNotAuthorized      = KatzenmintError{Code: 0x13, Msg: "authority is not authorized"}
 	ErrTxDocFalseVerification   = KatzenmintError{Code: 0x14, Msg: "cannot verify and parse document"}
-	ErrTxDocEpoch               = KatzenmintError{Code: 0x15, Msg: "document epoch inconsistent with transaction epoch"}
+	ErrTxDocEpochNotEqual       = KatzenmintError{Code: 0x15, Msg: "document epoch inconsistent with transaction epoch"}
 	ErrTxDocNotAuthorized       = KatzenmintError{Code: 0x16, Msg: "document is not authorized"}
 	ErrTxAuthorityParse         = KatzenmintError{Code: 0x17, Msg: "cannot parse authority"}
 	ErrTxAuthorityNotAuthorized = KatzenmintError{Code: 0x18, Msg: "descriptor is not authorized"}
 	ErrTxCommandNotFound        = KatzenmintError{Code: 0x19, Msg: "transaction command not found"}
 
 	// Transaction Execution Errors
-	ErrTxExeEpoch   = KatzenmintError{Code: 0x21, Msg: "expect transaction epoch within +-1 to current epoch"}
+	ErrTxWrongEpoch = KatzenmintError{Code: 0x21, Msg: "expect transaction epoch within +-1 to current epoch"}
 	ErrTxUpdateDesc = KatzenmintError{Code: 0x22, Msg: "error updating descriptor"}
 	ErrTxUpdateDoc  = KatzenmintError{Code: 0x23, Msg: "error updating document"}
 	ErrTxUpdateAuth = KatzenmintError{Code: 0x24, Msg: "error updating authority"}

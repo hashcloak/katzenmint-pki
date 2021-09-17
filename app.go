@@ -3,7 +3,6 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	"encoding/binary"
-	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
@@ -107,7 +106,7 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, payl
 			return
 		}
 		if doc.Epoch != tx.Epoch {
-			err = ErrTxDocEpoch
+			err = ErrTxDocEpochNotEqual
 			return
 		}
 		if !app.state.isDocumentAuthorized(doc) {
@@ -136,7 +135,7 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, payl
 func (app *KatzenmintApplication) executeTx(tx *Transaction, payload []byte, desc *pki.MixDescriptor, doc *pki.Document, auth *Authority) error {
 	// check for the epoch relative to the current epoch
 	if tx.Epoch < app.state.currentEpoch-1 || tx.Epoch > app.state.currentEpoch+1 {
-		return ErrTxExeEpoch
+		return ErrTxWrongEpoch
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:

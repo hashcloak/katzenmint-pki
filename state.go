@@ -24,8 +24,8 @@ const genesisEpoch uint64 = 1
 const epochInterval int64 = 5
 
 var (
-	errDocDescriptor = errors.New("insufficient descriptors uploaded")
-	errDocProvider   = errors.New("no providers uploaded")
+	errDocInsufficientDescriptor = errors.New("insufficient descriptors uploaded")
+	errDocInsufficientProvider   = errors.New("no providers uploaded")
 )
 
 type descriptor struct {
@@ -188,7 +188,7 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	state.Lock()
 	defer state.Unlock()
 
-	var errDoc error = nil
+	var err error
 	if len(state.deferCommit) > 0 {
 		for _, def := range state.deferCommit {
 			def()
@@ -199,9 +199,9 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	currentEpoch := state.currentEpoch
 	if state.newDocumentRequired() {
 		var doc *document
-		if doc, errDoc = state.generateDocument(); errDoc == nil {
-			errDoc = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
-			if errDoc == nil {
+		if doc, err = state.generateDocument(); err == nil {
+			err = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
+			if err == nil {
 				state.currentEpoch++
 				state.epochStartHeight = state.blockHeight
 				// TODO: Prune related descriptors
@@ -212,23 +212,19 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	binary.PutUvarint(epochInfoValue[:8], currentEpoch)
 	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
 	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
-	appHash, _, err := state.tree.SaveVersion()
-	if err != nil {
-		return nil, err
+	appHash, _, errSave := state.tree.SaveVersion()
+	if errSave != nil {
+		return nil, errSave
 	}
 	state.appHash = appHash
 
-	if errDoc == errDocDescriptor || errDoc == errDocProvider {
-		// Report these errors when they first appear
-		if errDoc == state.prevCommitError {
-			errDoc = nil
-		} else {
-			state.prevCommitError = errDoc
-		}
+	// Mute the error if keeps occuring
+	if err == state.prevCommitError {
+		err = nil
 	} else {
-		errDoc = nil
+		state.prevCommitError = err
 	}
-	return appHash, errDoc
+	return appHash, err
 }
 
 func (state *KatzenmintState) newDocumentRequired() bool {
@@ -252,7 +248,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Assign nodes to layers. # No randomness yet.
 	var topology [][][]byte
 	if len(nodes) < s.layers*s.minNodesPerLayer {
-		return nil, errDocDescriptor
+		return nil, errDocInsufficientDescriptor
 	}
 	sortNodesByPublicKey(nodes)
 	if d, ok := s.documents[s.currentEpoch-1]; ok {
@@ -264,7 +260,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Sort the providers
 	var providers [][]byte
 	if len(providersDesc) == 0 {
-		return nil, errDocProvider
+		return nil, errDocInsufficientProvider
 	}
 	sortNodesByPublicKey(providersDesc)
 	for _, v := range providersDesc {

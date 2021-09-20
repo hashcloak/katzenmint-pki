@@ -78,31 +78,31 @@ func (c *Config) FixupAndValidate() (err error) {
 	if c.Parameters.SendRatePerMinute <= 0 {
 		c.Parameters.SendRatePerMinute = DefaultParameters.SendRatePerMinute
 	}
-	if c.Parameters.Mu < 0 {
+	if c.Parameters.Mu <= 0 {
 		c.Parameters.Mu = DefaultParameters.Mu
 	}
 	if c.Parameters.MuMaxDelay <= 0 {
 		c.Parameters.MuMaxDelay = DefaultParameters.MuMaxDelay
 	}
-	if c.Parameters.LambdaP < 0 {
+	if c.Parameters.LambdaP <= 0 {
 		c.Parameters.LambdaP = DefaultParameters.LambdaP
 	}
 	if c.Parameters.LambdaPMaxDelay <= 0 {
 		c.Parameters.LambdaPMaxDelay = DefaultParameters.LambdaPMaxDelay
 	}
-	if c.Parameters.LambdaL < 0 {
+	if c.Parameters.LambdaL <= 0 {
 		c.Parameters.LambdaL = DefaultParameters.LambdaL
 	}
 	if c.Parameters.LambdaLMaxDelay <= 0 {
 		c.Parameters.LambdaLMaxDelay = DefaultParameters.LambdaLMaxDelay
 	}
-	if c.Parameters.LambdaD < 0 {
+	if c.Parameters.LambdaD <= 0 {
 		c.Parameters.LambdaD = DefaultParameters.LambdaD
 	}
 	if c.Parameters.LambdaDMaxDelay <= 0 {
 		c.Parameters.LambdaDMaxDelay = DefaultParameters.LambdaDMaxDelay
 	}
-	if c.Parameters.LambdaM < 0 {
+	if c.Parameters.LambdaM <= 0 {
 		c.Parameters.LambdaM = DefaultParameters.LambdaM
 	}
 	if c.Parameters.LambdaMMaxDelay <= 0 {

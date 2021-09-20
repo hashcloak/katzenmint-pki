@@ -3,11 +3,11 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	"encoding/binary"
-	"fmt"
 
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/katzenpost/core/crypto/cert"
+	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -55,7 +55,7 @@ func (app *KatzenmintApplication) SetOption(req abcitypes.RequestSetOption) abci
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err error) {
+func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, payload []byte, desc *pki.MixDescriptor, doc *pki.Document, auth *Authority, err error) {
 	// decode raw into transcation
 	tx = new(Transaction)
 	dec := codec.NewDecoderBytes(rawTx, jsonHandle)
@@ -82,22 +82,47 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 	switch tx.Command {
 	case PublishMixDescriptor:
 		var verifier cert.Verifier
-		payload := DecodeHex(tx.Payload)
+		payload = DecodeHex(tx.Payload)
 		verifier, err = s11n.GetVerifierFromDescriptor(payload)
 		if err != nil {
 			err = ErrTxDescInvalidVerifier
 			return
 		}
-		_, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
+		desc, err = s11n.VerifyAndParseDescriptor(verifier, payload, tx.Epoch)
 		if err != nil {
 			err = ErrTxDescFalseVerification
 			return
 		}
+		if !app.state.isDescriptorAuthorized(desc) {
+			err = ErrTxDescNotAuthorized
+			return
+		}
+
 	case AddConsensusDocument:
+		payload = []byte(tx.Payload)
+		doc, err = s11n.VerifyAndParseDocument(payload)
+		if err != nil {
+			err = ErrTxDocFalseVerification
+			return
+		}
+		if doc.Epoch != tx.Epoch {
+			err = ErrTxDocEpochNotEqual
+			return
+		}
+		if !app.state.isDocumentAuthorized(doc) {
+			err = ErrTxDocNotAuthorized
+			return
+		}
 	case AddNewAuthority:
+		payload = []byte(tx.Payload)
+		auth, err = VerifyAndParseAuthority(payload)
+		if err != nil {
+			err = ErrTxAuthorityParse
+			return
+		}
 		addr := tx.Address()
-		if !app.state.isAuthorized(addr) {
-			err = ErrTxNonAuthorized
+		if !app.state.isAuthorityAuthorized(addr) {
+			err = ErrTxAuthorityNotAuthorized
 			return
 		}
 	default:
@@ -107,74 +132,49 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, err 
 	return
 }
 
-func (app *KatzenmintApplication) executeTx(tx *Transaction) error {
+func (app *KatzenmintApplication) executeTx(tx *Transaction, payload []byte, desc *pki.MixDescriptor, doc *pki.Document, auth *Authority) error {
 	// check for the epoch relative to the current epoch
 	if tx.Epoch < app.state.currentEpoch-1 || tx.Epoch > app.state.currentEpoch+1 {
-		return fmt.Errorf("expect transaction for epoch within +-1 to %d, but got epoch %d", app.state.currentEpoch, tx.Epoch)
+		return ErrTxWrongEpoch
 	}
 	switch tx.Command {
 	case PublishMixDescriptor:
-		payload := DecodeHex(tx.Payload)
-		desc, err := s11n.ParseDescriptorWithoutVerify(payload)
+		err := app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
-			return err
-		}
-		// make sure the descriptor is from authorized peerr
-		if !app.state.isDescriptorAuthorized(desc) {
-			return fmt.Errorf("descriptor is not authorized")
-		}
-		err = app.state.updateMixDescriptor(payload, desc, tx.Epoch)
-		if err != nil {
-			return fmt.Errorf("error updating descriptor: %v", err)
+			return ErrTxUpdateDesc
 		}
 	case AddConsensusDocument:
-		payload := []byte(tx.Payload)
-		doc, err := s11n.VerifyAndParseDocument(payload)
+		err := app.state.updateDocument(payload, doc, tx.Epoch)
 		if err != nil {
-			return err
-		} else if doc.Epoch != tx.Epoch {
-			return s11n.ErrInvalidEpoch
-		}
-		if !app.state.isDocumentAuthorized(doc) {
-			return fmt.Errorf("document is not authorized")
-		}
-		err = app.state.updateDocument(payload, doc, tx.Epoch)
-		if err != nil {
-			return fmt.Errorf("error updating document: %v", err)
+			return ErrTxUpdateDoc
 		}
 	case AddNewAuthority:
-		// TODO: update validators
-		payload := []byte(tx.Payload)
-		authority, err := VerifyAndParseAuthority(payload)
+		err := app.state.updateAuthority(payload, abcitypes.UpdateValidator(auth.IdentityKey.Bytes(), auth.Power, ""))
 		if err != nil {
-			return fmt.Errorf("failed to parse authority: %v", err)
-		}
-		err = app.state.updateAuthority(payload, abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, ""))
-		if err != nil {
-			return fmt.Errorf("error updating authority: %v", err)
+			return ErrTxUpdateAuth
 		}
 	default:
-		return fmt.Errorf("transaction type not supported")
+		return ErrTxCommandNotFound
 	}
 	// Unreached
 	return nil
 }
 
 func (app *KatzenmintApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	tx, err := app.isTxValid(req.Tx)
+	tx, payload, desc, doc, auth, err := app.isTxValid(req.Tx)
 	if err != nil {
 		return abcitypes.ResponseDeliverTx{Code: err.(KatzenmintError).Code, Log: err.(KatzenmintError).Msg}
 	}
-	err = app.executeTx(tx)
+	err = app.executeTx(tx, payload, desc, doc, auth)
 	if err != nil {
-		return abcitypes.ResponseDeliverTx{Code: 0xFF, Log: err.Error()}
+		return abcitypes.ResponseDeliverTx{Code: err.(KatzenmintError).Code, Log: err.(KatzenmintError).Msg}
 	}
 	return abcitypes.ResponseDeliverTx{Code: abcitypes.CodeTypeOK}
 }
 
 // TODO: gas formula
 func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	_, err := app.isTxValid(req.Tx)
+	_, _, _, _, _, err := app.isTxValid(req.Tx)
 	if err != nil {
 		return abcitypes.ResponseCheckTx{Code: err.(KatzenmintError).Code, Log: err.(KatzenmintError).Msg, GasWanted: 1}
 	}
@@ -185,35 +185,30 @@ func (app *KatzenmintApplication) CheckTx(req abcitypes.RequestCheckTx) abcitype
 func (app *KatzenmintApplication) Commit() abcitypes.ResponseCommit {
 	appHash, err := app.state.Commit()
 	if err != nil {
-		app.logger.Error("commit failed", "error", err)
+		app.logger.Error("commit failed", "epoch", app.state.currentEpoch, "error", err)
 	}
 	return abcitypes.ResponseCommit{Data: appHash}
 }
 
-// Note, no proof is included here
-// TODO: include merkle proof?
 func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 
 	kquery := new(Query)
 	dec := codec.NewDecoderBytes(rquery.Data, jsonHandle)
 	if err := dec.Decode(kquery); err != nil {
-		resQuery.Log = "error query format"
-		resQuery.Code = 0x1
+		parseErrorResponse(ErrQueryInvalidFormat, &resQuery)
 		return
 	}
 
 	switch kquery.Command {
 	default:
-		resQuery.Log = "unsupported query"
-		resQuery.Code = 0x2
+		parseErrorResponse(ErrQueryUnsupported, &resQuery)
 		return
 	case GetEpoch:
 		resQuery.Height = app.state.blockHeight - 1
 		val, proof, err := app.state.latestEpoch(resQuery.Height)
 		if err != nil {
 			app.logger.Error("peer: failed to retrieve epoch for height", "height", resQuery.Height, "error", err)
-			resQuery.Log = fmt.Sprintf("cannot obtain epoch for the current height: %v", err)
-			resQuery.Code = 0x3
+			parseErrorResponse(ErrQueryEpochFailed, &resQuery)
 			return
 		}
 		resQuery.Key = proof.GetKey()
@@ -226,9 +221,12 @@ func (app *KatzenmintApplication) Query(rquery abcitypes.RequestQuery) (resQuery
 		resQuery.Height = app.state.blockHeight - 1
 		doc, proof, err := app.state.documentForEpoch(kquery.Epoch, resQuery.Height)
 		if err != nil {
-			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "error", err)
-			resQuery.Log = "document does not exist"
-			resQuery.Code = 0x4
+			app.logger.Error("peer: failed to retrieve document for epoch", "epoch", kquery.Epoch, "current", app.state.currentEpoch, "error", err)
+			if err == ErrQueryNoDocument || err == ErrQueryDocumentNotReady {
+				parseErrorResponse(err.(KatzenmintError), &resQuery)
+			} else {
+				parseErrorResponse(ErrQueryDocumentUnknown, &resQuery)
+			}
 			return
 		}
 		resQuery.Key = proof.GetKey()

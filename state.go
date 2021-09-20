@@ -3,6 +3,7 @@ package katzenmint
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	katvoting "github.com/katzenpost/authority/voting/server/config"
 	"github.com/katzenpost/core/crypto/eddsa"
-	"github.com/katzenpost/core/epochtime"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -22,6 +22,11 @@ import (
 
 const genesisEpoch uint64 = 1
 const epochInterval int64 = 5
+
+var (
+	errDocInsufficientDescriptor = errors.New("insufficient descriptors uploaded")
+	errDocInsufficientProvider   = errors.New("no providers uploaded")
+)
 
 type descriptor struct {
 	desc *pki.MixDescriptor
@@ -50,7 +55,8 @@ type KatzenmintState struct {
 	validators       map[string]pc.PublicKey
 	validatorUpdates []abcitypes.ValidatorUpdate
 
-	deferCommit []func()
+	deferCommit     []func()
+	prevCommitError error
 }
 
 func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
@@ -75,6 +81,7 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 		validators:       make(map[string]pc.PublicKey),
 		validatorUpdates: make([]abcitypes.ValidatorUpdate, 0),
 		deferCommit:      make([]func(), 0),
+		prevCommitError:  nil,
 	}
 
 	// Load current epoch and its start height
@@ -181,7 +188,7 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	state.Lock()
 	defer state.Unlock()
 
-	var errDoc error
+	var err error
 	if len(state.deferCommit) > 0 {
 		for _, def := range state.deferCommit {
 			def()
@@ -192,9 +199,9 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	currentEpoch := state.currentEpoch
 	if state.newDocumentRequired() {
 		var doc *document
-		if doc, errDoc = state.generateDocument(); errDoc == nil {
-			errDoc = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
-			if errDoc == nil {
+		if doc, err = state.generateDocument(); err == nil {
+			err = state.updateDocument(doc.raw, doc.doc, state.currentEpoch)
+			if err == nil {
 				state.currentEpoch++
 				state.epochStartHeight = state.blockHeight
 				// TODO: Prune related descriptors
@@ -205,12 +212,18 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	binary.PutUvarint(epochInfoValue[:8], currentEpoch)
 	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
 	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
-	appHash, _, err := state.tree.SaveVersion()
-	if err == nil {
-		err = errDoc
+	appHash, _, errSave := state.tree.SaveVersion()
+	if errSave != nil {
+		return nil, errSave
 	}
 	state.appHash = appHash
 
+	// Mute the error if keeps occuring
+	if err == state.prevCommitError {
+		err = nil
+	} else {
+		state.prevCommitError = err
+	}
 	return appHash, err
 }
 
@@ -235,7 +248,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Assign nodes to layers. # No randomness yet.
 	var topology [][][]byte
 	if len(nodes) < s.layers*s.minNodesPerLayer {
-		return nil, fmt.Errorf("insufficient descriptors uploaded")
+		return nil, errDocInsufficientDescriptor
 	}
 	sortNodesByPublicKey(nodes)
 	if d, ok := s.documents[s.currentEpoch-1]; ok {
@@ -247,7 +260,7 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Sort the providers
 	var providers [][]byte
 	if len(providersDesc) == 0 {
-		return nil, fmt.Errorf("no providers uploaded")
+		return nil, errDocInsufficientProvider
 	}
 	sortNodesByPublicKey(providersDesc)
 	for _, v := range providersDesc {
@@ -322,21 +335,19 @@ func (state *KatzenmintState) documentForEpoch(epoch uint64, height int64) ([]by
 		return nil, nil, err
 	}
 	if doc == nil {
-		// TODO: replace how we get `now`
-		now, _, _ := epochtime.Now()
-		if epoch <= now {
-			return nil, nil, fmt.Errorf("document for epoch %d was not generated and will never exist", epoch)
+		if epoch < state.currentEpoch {
+			return nil, nil, ErrQueryNoDocument
 		}
-		if epoch > now+1 {
-			return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
+		if epoch == state.currentEpoch {
+			return nil, nil, ErrQueryDocumentNotReady
 		}
-		return nil, nil, fmt.Errorf("document for epoch %d is not ready yet", epoch)
+		return nil, nil, fmt.Errorf("requesting document for a too future epoch %d", epoch)
 	}
 	valueOp := iavl.NewValueOp(key, proof)
 	return doc, valueOp, nil
 }
 
-func (state *KatzenmintState) isAuthorized(addr string) bool {
+func (state *KatzenmintState) isAuthorityAuthorized(addr string) bool {
 	return true
 }
 

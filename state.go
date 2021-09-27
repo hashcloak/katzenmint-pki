@@ -373,9 +373,12 @@ func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bo
 	*/
 }
 
-func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
-	return true
-}
+// Deprecated
+/*
+	func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
+		return true
+	}
+*/
 
 func (state *KatzenmintState) Set(key []byte, value []byte) error {
 	state.tree.Set(key, value)

@@ -99,20 +99,25 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, payl
 		}
 
 	case AddConsensusDocument:
-		payload = []byte(tx.Payload)
-		doc, err = s11n.VerifyAndParseDocument(payload)
-		if err != nil {
-			err = ErrTxDocFalseVerification
-			return
-		}
-		if doc.Epoch != tx.Epoch {
-			err = ErrTxDocEpochNotEqual
-			return
-		}
-		if !app.state.isDocumentAuthorized(doc) {
-			err = ErrTxDocNotAuthorized
-			return
-		}
+		// Deprecated
+		err = ErrTxCommandNotFound
+		return
+		/*
+			payload = []byte(tx.Payload)
+			doc, err = s11n.VerifyAndParseDocument(payload)
+			if err != nil {
+				err = ErrTxDocFalseVerification
+				return
+			}
+			if doc.Epoch != tx.Epoch {
+				err = ErrTxDocEpochNotEqual
+				return
+			}
+			if !app.state.isDocumentAuthorized(doc) {
+				err = ErrTxDocNotAuthorized
+				return
+			}
+		*/
 	case AddNewAuthority:
 		payload = []byte(tx.Payload)
 		auth, err = VerifyAndParseAuthority(payload)
@@ -144,10 +149,14 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction, payload []byte, des
 			return ErrTxUpdateDesc
 		}
 	case AddConsensusDocument:
-		err := app.state.updateDocument(payload, doc, tx.Epoch)
-		if err != nil {
-			return ErrTxUpdateDoc
-		}
+		// Deprecated
+		return ErrTxCommandNotFound
+		/*
+			err := app.state.updateDocument(payload, doc, tx.Epoch)
+			if err != nil {
+				return ErrTxUpdateDoc
+			}
+		*/
 	case AddNewAuthority:
 		err := app.state.updateAuthority(payload, abcitypes.UpdateValidator(auth.IdentityKey.Bytes(), auth.Power, ""))
 		if err != nil {

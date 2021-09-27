@@ -16,7 +16,7 @@ lint:
 .PHONY: test
 test:
 	go test ./s11n
-	go test -tags=$(GOTAGS) ./
+	go test ./
 
 
 .PHONY: setup

@@ -81,12 +81,12 @@
     PrimaryAddress = "tcp://172.29.1.7:26657"
     WitnessesAddresses = ["tcp://172.29.1.7:26657"]
     DatabaseName = "data-db"
-    DatabaseDir = "/Users/laiguancheng/Desktop/projects/hashcloak/genconfig/output/data"
+    DatabaseDir = "/conf/data/kdata"
     RPCAddress = "tcp://172.29.1.7:26657"
     [PKI.Voting.TrustOptions]
       Period = 600000000000
-      Height = 15
-      Hash = [67, 94, 183, 224, 185, 147, 94, 51, 113, 144, 138, 151, 192, 176, 188, 178, 217, 240, 18, 1, 59, 7, 81, 143, 248, 73, 184, 108, 48, 124, 16, 254]
+      Height = 6
+      Hash = [83, 127, 233, 248, 49, 87, 145, 180, 136, 52, 2, 2, 135, 38, 135, 106, 132, 175, 108, 221, 76, 60, 251, 210, 137, 70, 166, 181, 220, 88, 29, 188]
 
 [Management]
   Enable = true

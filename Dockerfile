@@ -19,7 +19,7 @@ RUN make build
 FROM alpine
 
 RUN apk update && \
-    apk add --no-cache ca-certificates tzdata && \
+    apk add --no-cache ca-certificates tzdata curl && \
     update-ca-certificates
 
 COPY --from=builder /go/katzenmint-pki/katzenmint /go/bin/katzenmint

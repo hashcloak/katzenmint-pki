@@ -98,26 +98,6 @@ func (app *KatzenmintApplication) isTxValid(rawTx []byte) (tx *Transaction, payl
 			return
 		}
 
-	case AddConsensusDocument:
-		// Deprecated
-		err = ErrTxCommandNotFound
-		return
-		/*
-			payload = []byte(tx.Payload)
-			doc, err = s11n.VerifyAndParseDocument(payload)
-			if err != nil {
-				err = ErrTxDocFalseVerification
-				return
-			}
-			if doc.Epoch != tx.Epoch {
-				err = ErrTxDocEpochNotEqual
-				return
-			}
-			if !app.state.isDocumentAuthorized(doc) {
-				err = ErrTxDocNotAuthorized
-				return
-			}
-		*/
 	case AddNewAuthority:
 		payload = []byte(tx.Payload)
 		auth, err = VerifyAndParseAuthority(payload)
@@ -146,20 +126,13 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction, payload []byte, des
 	case PublishMixDescriptor:
 		err := app.state.updateMixDescriptor(payload, desc, tx.Epoch)
 		if err != nil {
+			app.logger.Error("failed to publish descriptor", "epoch", app.state.currentEpoch, "error", err)
 			return ErrTxUpdateDesc
 		}
-	case AddConsensusDocument:
-		// Deprecated
-		return ErrTxCommandNotFound
-		/*
-			err := app.state.updateDocument(payload, doc, tx.Epoch)
-			if err != nil {
-				return ErrTxUpdateDoc
-			}
-		*/
 	case AddNewAuthority:
 		err := app.state.updateAuthority(payload, abcitypes.UpdateValidator(auth.IdentityKey.Bytes(), auth.Power, ""))
 		if err != nil {
+			app.logger.Error("failed to add new authority", "epoch", app.state.currentEpoch, "error", err)
 			return ErrTxUpdateAuth
 		}
 	default:

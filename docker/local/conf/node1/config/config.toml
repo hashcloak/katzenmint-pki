@@ -181,10 +181,10 @@ laddr = "tcp://0.0.0.0:26656"
 external_address = ""
 
 # Comma separated list of seed nodes to connect to
-seeds = "83a099ac776562ac5753803c2caf710dd7f5b06f@172.29.1.9:26656"
+seeds = ""
 
 # Comma separated list of nodes to keep persistent connections to
-persistent_peers = ""
+persistent_peers = "83a099ac776562ac5753803c2caf710dd7f5b06f@172.29.1.9:26656,87ab6db0b25218f62430226ab2658f379f717cdb@172.29.1.8:26656"
 
 # UPNP port forwarding
 upnp = false
@@ -194,7 +194,7 @@ addr_book_file = "config/addrbook.json"
 
 # Set true for strict address routability rules
 # Set false for private or local networks
-addr_book_strict = true
+addr_book_strict = false
 
 # Maximum number of inbound peers
 max_num_inbound_peers = 40

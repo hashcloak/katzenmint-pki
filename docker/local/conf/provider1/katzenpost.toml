@@ -64,17 +64,6 @@
       data_store = "/conf/data/memspool.storage"
       log_dir = "/conf/data"
 
-  [[Provider.CBORPluginKaetzchen]]
-    Capability = "gor"
-    Endpoint = "+gor"
-    Command = "/go/bin/Meson"
-    MaxConcurrency = 1
-    Disable = false
-    [Provider.CBORPluginKaetzchen.Config]
-      f = "/conf/data/currency.toml"
-      log_dir = "/conf/data"
-      log_level = "DEBUG"
-
 [PKI]
   [PKI.Voting]
     ChainID = "katzenmint-chain-71DRoz"
@@ -85,8 +74,8 @@
     RPCAddress = "tcp://172.29.1.7:26657"
     [PKI.Voting.TrustOptions]
       Period = 600000000000
-      Height = 6
-      Hash = [83, 127, 233, 248, 49, 87, 145, 180, 136, 52, 2, 2, 135, 38, 135, 106, 132, 175, 108, 221, 76, 60, 251, 210, 137, 70, 166, 181, 220, 88, 29, 188]
+      Height = 476
+      Hash = [21, 234, 168, 96, 28, 153, 216, 6, 220, 129, 9, 158, 101, 4, 165, 77, 25, 134, 207, 170, 163, 138, 95, 161, 25, 162, 99, 62, 111, 87, 37, 150]
 
 [Management]
   Enable = true

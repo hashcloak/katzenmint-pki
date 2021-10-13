@@ -51,6 +51,9 @@ services:
       - ./conf/mix1:/conf
       - ./scripts:/scripts
     entrypoint: ash /scripts/entrypoint.sh
+    ports:
+      - "127.0.0.1:30004:30004"
+      - "127.0.0.1:40004:40004"
     depends_on:
       - auth1
       - auth2
@@ -68,6 +71,9 @@ services:
       - ./conf/mix2:/conf
       - ./scripts:/scripts
     entrypoint: ash /scripts/entrypoint.sh
+    ports:
+      - "127.0.0.1:30005:30005"
+      - "127.0.0.1:40005:40005"
     depends_on:
       - auth1
       - auth2
@@ -85,6 +91,9 @@ services:
       - ./conf/mix3:/conf
       - ./scripts:/scripts
     entrypoint: ash /scripts/entrypoint.sh
+    ports:
+      - "127.0.0.1:30006:30006"
+      - "127.0.0.1:40006:40006"
     depends_on:
       - auth1
       - auth2

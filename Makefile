@@ -25,7 +25,7 @@ setup:
 
 .PHONY: build
 build:
-	go build -tags=$(GOTAGS) -o katzenmint cmd/katzenmint.go
+	go build -tags=$(GOTAGS) -o katzenmint cmd/katzenmint/katzenmint.go
 
 .PHONY: docker-build
 docker-build:

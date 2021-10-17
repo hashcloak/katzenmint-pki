@@ -22,11 +22,6 @@ variable "SSH_KEY_FILE" {
   type = string
 }
 
-variable "SERVERS" {
-  description = "Number of nodes in testnet"
-  default = "4"
-}
-
 variable "INSTANCE_SIZE" {
   description = "The instance size to use"
   default = "s-1vcpu-1gb"
@@ -40,7 +35,6 @@ module "cluster" {
   source           = "./cluster"
   name             = "${var.TESTNET_NAME}"
   ssh_key          = "${var.SSH_KEY_FILE}"
-  servers          = "${var.SERVERS}"
   instance_size    = "${var.INSTANCE_SIZE}"
 }
 

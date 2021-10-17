@@ -23,7 +23,7 @@ resource "digitalocean_droplet" "cluster" {
   region = "${element(var.regions, count.index)}"
   ssh_keys = ["${digitalocean_ssh_key.cluster.id}"]
   count = "${var.servers}"
-  tags = ["${digitalocean_tag.cluster.id}"]
+  tags = ["${element(var.tags, count.index)}"]
 
   connection {
     timeout = "30s"

@@ -5,7 +5,7 @@ variable "name" {
 variable "regions" {
   description = "Regions to launch in"
   type = list
-  default = ["NYC1", "NYC3", "FRA1", "LON1", "AMS3", "SFO2", "SGP1", "TOR1"]
+  default = ["NYC1", "NYC3", "FRA1", "LON1", "AMS3", "SGP1", "TOR1", "BLR1", "SFO1", "SFO2", "SFO3"]
 }
 
 variable "ssh_key" {
@@ -20,6 +20,12 @@ variable "instance_size" {
 
 variable "servers" {
   description = "Desired instance count"
-  default     = 4
+  default     = 8
+}
+
+variable "tags" {
+  description = "Tags for droplet"
+  type = list
+  default = ["sentrynet", "sentrynet", "sentrynet", "mixnet", "mixnet", "mixnet", "providernet", "providernet"]
 }
 

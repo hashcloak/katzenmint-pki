@@ -8,6 +8,7 @@ Restart=on-failure
 User={{service}}
 Group={{service}}
 PermissionsStartOnly=true
+WorkingDirectory=/home/{{service}}/.{{service}}
 ExecStart=/usr/bin/meson-server -f /home/{{service}}/.{{service}}/katzenpost.toml
 ExecReload=/bin/kill -HUP $MAINPID
 KillSignal=SIGTERM

@@ -22,7 +22,7 @@ resource "digitalocean_droplet" "cluster" {
   size = "${var.instance_size}"
   region = "${element(var.regions, count.index)}"
   ssh_keys = ["${digitalocean_ssh_key.cluster.id}"]
-  count = "${var.servers}"
+  count = "${var.kservers+var.mservers+var.pservers}"
   tags = ["${element(var.tags, count.index)}"]
 
   connection {

@@ -18,9 +18,19 @@ variable "instance_size" {
   default = "s-1vcpu-1gb"
 }
 
-variable "servers" {
-  description = "Desired instance count"
-  default     = 8
+variable "kservers" {
+  description = "Desired katzenmint instance count"
+  default     = 3
+}
+
+variable "mservers" {
+  description = "Desired mix instance count"
+  default     = 3
+}
+
+variable "pservers" {
+  description = "Desired provider instance count"
+  default     = 2
 }
 
 variable "tags" {

@@ -130,7 +130,7 @@ func (app *KatzenmintApplication) executeTx(tx *Transaction, payload []byte, des
 			return ErrTxUpdateDesc
 		}
 	case AddNewAuthority:
-		err := app.state.updateAuthority(payload, abcitypes.UpdateValidator(auth.IdentityKey.Bytes(), auth.Power, ""))
+		err := app.state.updateAuthority(payload, abcitypes.UpdateValidator(auth.PubKey, auth.Power, auth.KeyType))
 		if err != nil {
 			app.logger.Error("failed to add new authority", "epoch", app.state.currentEpoch, "error", err)
 			return ErrTxUpdateAuth

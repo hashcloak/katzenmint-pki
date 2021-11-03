@@ -168,8 +168,8 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 			// return true
 		}
 		state.validators[string(pk.Address())] = protopk
-		if !bytes.Equal(auth.IdentityKey.Bytes(), protopk.GetEd25519()) {
-			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.IdentityKey.Bytes()))
+		if !bytes.Equal(auth.PubKey, protopk.GetEd25519()) {
+			panic(fmt.Errorf("storage key id %v has another authority id %v", id, auth.PubKey))
 			// return false
 		}
 		return false
@@ -522,16 +522,13 @@ func (state *KatzenmintState) updateAuthority(rawAuth []byte, v abcitypes.Valida
 		// TODO: make sure the voting power not exceed 1/3
 		// add or update validator
 		if rawAuth == nil && v.Power > 0 {
-			auth := new(Authority)
-			auth.Auth = "katzenmint"
-			edPubkey := v.PubKey.GetEd25519()
-			auth.IdentityKey = new(eddsa.PublicKey)
-			if err := auth.IdentityKey.FromBytes(edPubkey); err != nil {
-				return err
-			}
-			auth.LinkKey = auth.IdentityKey.ToECDH()
-			auth.Power = v.Power
-			if rawAuth, err = EncodeJson(auth); err != nil {
+			rawAuth, err = EncodeJson(Authority{
+				Auth:    "katzenmint",
+				PubKey:  v.PubKey.GetEd25519(),
+				KeyType: "",
+				Power:   v.Power,
+			})
+			if err != nil {
 				return err
 			}
 		}

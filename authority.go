@@ -1,8 +1,6 @@
 package katzenmint
 
 import (
-	"github.com/katzenpost/core/crypto/ecdh"
-	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/ugorji/go/codec"
 )
 
@@ -11,11 +9,11 @@ type Authority struct {
 	// Auth is the prefix of the authority.
 	Auth string
 
-	// IdentityKey is the node's identity (signing) key.
-	IdentityKey *eddsa.PublicKey
+	// PubKey is the validator's public key.
+	PubKey []byte
 
-	// LinkKey is the node's wire protocol public key.
-	LinkKey *ecdh.PublicKey
+	// KeyType is the validator's key type.
+	KeyType string
 
 	// Power is the voting power of the authority.
 	Power int64

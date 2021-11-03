@@ -39,19 +39,14 @@ func TestAddAuthority(t *testing.T) {
 		App: app,
 	}
 
-	// setup authority
+	// create authority transaction
 	privKey, err := eddsa.NewKeypair(rand.Reader)
 	require.NoError(err, "eddsa.NewKeypair()")
-	/* linkPriv, err := ecdh.NewKeypair(rand.Reader) */
-	linkPriv := privKey.ToECDH()
-	require.NoError(err, "ecdh.NewKeypair()")
-
-	// create authority transaction
 	authority := &Authority{
-		Auth:        "katzenmint",
-		Power:       1,
-		IdentityKey: privKey.PublicKey(),
-		LinkKey:     linkPriv.PublicKey(),
+		Auth:    "katzenmint",
+		Power:   1,
+		PubKey:  privKey.PublicKey().Bytes(),
+		KeyType: "",
 	}
 	rawAuth, err := EncodeJson(authority)
 	if err != nil {
@@ -74,7 +69,7 @@ func TestAddAuthority(t *testing.T) {
 	m.App.Commit()
 
 	// make checks
-	validator := abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, "")
+	validator := abcitypes.UpdateValidator(authority.PubKey, authority.Power, authority.KeyType)
 	protoPubKey, err := validator.PubKey.Marshal()
 	if err != nil {
 		t.Fatalf("Failed to encode public with protobuf: %v\n", err)

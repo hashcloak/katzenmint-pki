@@ -9,13 +9,11 @@ import (
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	"github.com/hashcloak/katzenmint-pki/testutil"
-	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	dbm "github.com/tendermint/tm-db"
-	"github.com/ugorji/go/codec"
 
 	// "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -178,24 +176,22 @@ func TestUpdateAuthority(t *testing.T) {
 	state := NewKatzenmintState(kConfig, db)
 
 	// create authority
-	authority := new(Authority)
-	authority.Auth = "katzenmint"
-	authority.Power = 1
 	k, err := eddsa.NewKeypair(rand.Reader)
 	require.NoError(err, "eddsa.NewKeypair()")
-	authority.IdentityKey = k.PublicKey()
-	linkPriv, err := ecdh.NewKeypair(rand.Reader)
-	require.NoError(err, "ecdh.NewKeypair()")
-	authority.LinkKey = linkPriv.PublicKey()
-	rawAuth := make([]byte, 10)
-	enc := codec.NewEncoderBytes(&rawAuth, jsonHandle)
-	if err := enc.Encode(authority); err != nil {
+	authority := &Authority{
+		Auth:    "katzenmint",
+		Power:   1,
+		PubKey:  k.PublicKey().Bytes(),
+		KeyType: "",
+	}
+	rawAuth, err := EncodeJson(authority)
+	if err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
 
 	// update authority
 	state.BeginBlock()
-	validator := abcitypes.UpdateValidator(authority.IdentityKey.Bytes(), authority.Power, "")
+	validator := abcitypes.UpdateValidator(authority.PubKey, authority.Power, authority.KeyType)
 	err = state.updateAuthority(rawAuth, validator)
 	if err != nil {
 		fmt.Printf("Failed to update authority: %+v\n", err)

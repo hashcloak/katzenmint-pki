@@ -3,9 +3,7 @@ package katzenmint
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"encoding/binary"
-	"encoding/json"
 	"io/ioutil"
 	"net/url"
 	"testing"
@@ -22,7 +20,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/rpc/client/mock"
 	dbm "github.com/tendermint/tm-db"
-	"github.com/ugorji/go/codec"
 )
 
 func newDiscardLogger() (logger log.Logger) {
@@ -42,46 +39,32 @@ func TestAddAuthority(t *testing.T) {
 		App: app,
 	}
 
-	// create authority
-	authority := new(Authority)
-	authority.Auth = "katzenmint"
-	authority.Power = 1
+	// setup authority
 	privKey, err := eddsa.NewKeypair(rand.Reader)
 	require.NoError(err, "eddsa.NewKeypair()")
-	authority.IdentityKey = privKey.PublicKey()
 	/* linkPriv, err := ecdh.NewKeypair(rand.Reader) */
 	linkPriv := privKey.ToECDH()
 	require.NoError(err, "ecdh.NewKeypair()")
-	authority.LinkKey = linkPriv.PublicKey()
-	rawAuth := make([]byte, 128)
-	enc := codec.NewEncoderBytes(&rawAuth, jsonHandle)
-	if err := enc.Encode(authority); err != nil {
+
+	// create authority transaction
+	authority := &Authority{
+		Auth:        "katzenmint",
+		Power:       1,
+		IdentityKey: privKey.PublicKey(),
+		LinkKey:     linkPriv.PublicKey(),
+	}
+	rawAuth, err := EncodeJson(authority)
+	if err != nil {
 		t.Fatalf("Failed to marshal authority: %+v\n", err)
 	}
-
-	// form transaction
-	tx := new(Transaction)
-	tx.Version = ProtocolVersion
-	tx.Epoch = 1
-	tx.Command = AddNewAuthority
-	tx.Payload = string(rawAuth)
-	pubKey := authority.IdentityKey.Bytes()
-	tx.PublicKey = EncodeHex(pubKey[:])
-	msgHash := tx.SerializeHash()
-	sig := privKey.Sign(msgHash[:])
-	tx.Signature = EncodeHex(sig[:])
-	if !tx.IsVerified() {
-		t.Fatalf("Transaction is not verified: %+v\n", tx)
-	}
-	encTx := make([]byte, 128)
-	enc2 := codec.NewEncoderBytes(&encTx, jsonHandle)
-	if err := enc2.Encode(tx); err != nil {
-		t.Fatalf("Failed to marshal transaction: %+v\n", err)
+	tx, err := FormTransaction(AddNewAuthority, 1, string(rawAuth), privKey)
+	if err != nil {
+		t.Fatalf("Error forming transaction: %+v\n", err)
 	}
 
 	// post transaction to app
 	m.App.BeginBlock(abcitypes.RequestBeginBlock{})
-	res, err := m.BroadcastTxCommit(context.Background(), encTx)
+	res, err := m.BroadcastTxCommit(context.Background(), tx)
 	require.Nil(err)
 	assert.True(res.CheckTx.IsOK())
 	require.NotNil(res.DeliverTx)
@@ -140,18 +123,11 @@ func TestPostDescriptorAndCommit(t *testing.T) {
 
 	// create transaction for each descriptor
 	transactions := make([][]byte, 0)
-	_, privKey, err := ed25519.GenerateKey(rand.Reader)
+	privKey, err := eddsa.NewKeypair(rand.Reader)
 	require.NoError(err, "GenerateKey()")
 	for _, rawDesc := range descriptors {
-		rawTx := Transaction{
-			Version: ProtocolVersion,
-			Epoch:   epoch,
-			Command: PublishMixDescriptor,
-			Payload: EncodeHex(rawDesc),
-		}
-		rawTx.AppendSignature(privKey)
-		packedTx, err := json.Marshal(rawTx)
-		require.NoError(err, "Marshal raw transaction")
+		packedTx, err := FormTransaction(PublishMixDescriptor, epoch, EncodeHex(rawDesc), privKey)
+		require.NoError(err)
 		transactions = append(transactions, packedTx)
 	}
 
@@ -189,17 +165,15 @@ func TestPostDescriptorAndCommit(t *testing.T) {
 	m.App.Commit()
 
 	// make a query for the doc
-	var data []byte
-	query := Query{
+	query, err := EncodeJson(Query{
 		Version: ProtocolVersion,
 		Epoch:   epoch,
 		Command: GetConsensus,
 		Payload: "",
-	}
-	err = codec.NewEncoderBytes(&data, jsonHandle).Encode(query)
+	})
 	require.Nil(err)
 
-	rsp, err := m.ABCIQuery(context.Background(), "", data)
+	rsp, err := m.ABCIQuery(context.Background(), "", query)
 	require.Nil(err)
 	require.True(rsp.Response.IsOK(), rsp.Response.Log)
 	require.Equal(loaded, rsp.Response.Value, "App responses with an erroneous pki document")

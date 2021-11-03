@@ -3,6 +3,7 @@ package katzenmint
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"fmt"
 
 	"github.com/katzenpost/core/crypto/eddsa"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -107,10 +108,20 @@ func (tx *Transaction) Address() string {
 	return string(pubkey.Address())
 }
 
-// AppendSignature appends the public key and a signature to the transaction
-func (tx *Transaction) AppendSignature(privKey ed25519.PrivateKey) {
-	tx.PublicKey = EncodeHex(privKey.Public().(ed25519.PublicKey))
+// FormTransaction returns the crafted transaction that can be posted
+func FormTransaction(command Command, epoch uint64, payload string, privKey *eddsa.PrivateKey) ([]byte, error) {
+	tx := &Transaction{
+		Version:   ProtocolVersion,
+		Epoch:     epoch,
+		Command:   command,
+		Payload:   payload,
+		PublicKey: EncodeHex(privKey.PublicKey().Bytes()),
+	}
 	msgHash := tx.SerializeHash()
-	sig := ed25519.Sign(privKey, msgHash[:])
-	tx.Signature = EncodeHex(sig[:])
+	sig := privKey.Sign(msgHash[:])
+	tx.Signature = EncodeHex(sig)
+	if !tx.IsVerified() {
+		return nil, fmt.Errorf("unable to sign properly")
+	}
+	return EncodeJson(tx)
 }

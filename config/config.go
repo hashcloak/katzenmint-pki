@@ -51,6 +51,7 @@ type Config struct {
 	Layers               int
 	MinNodesPerLayer     int
 	Parameters           katconfig.Parameters
+	Membership           bool
 }
 
 func DefaultConfig() (cfg *Config) {
@@ -136,4 +137,15 @@ func LoadFile(f string) (*Config, error) {
 		return nil, err
 	}
 	return Load(b)
+}
+
+// SaveFile saves the config to the provided file
+func SaveFile(f string, config *Config) error {
+	file, err := os.Create(f)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	enc := toml.NewEncoder(file)
+	return enc.Encode(config)
 }

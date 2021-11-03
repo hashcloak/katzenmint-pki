@@ -152,9 +152,17 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err = joinNetwork(config); err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		os.Exit(2)
+	if !kConfig.Membership {
+		err = joinNetwork(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v", err)
+			os.Exit(2)
+		}
+		kConfig.Membership = true
+		err = kcfg.SaveFile(configFile, kConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error saving config: %v", err)
+		}
 	}
 
 	if err = node.Start(); err != nil {

@@ -2,11 +2,14 @@ package main
 
 import (
 	//"errors"
+
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	katzenmint "github.com/hashcloak/katzenmint-pki"
@@ -20,6 +23,7 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	"github.com/tendermint/tendermint/rpc/client/http"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -44,6 +48,41 @@ func readConfig(configFile string) (config *cfg.Config, err error) {
 		return
 	}
 	return
+}
+
+func joinNetwork(config *cfg.Config) error {
+	// prepare AddAuthority transaction
+	pv := privval.LoadFilePV(
+		config.PrivValidatorKeyFile(),
+		config.PrivValidatorStateFile(),
+	)
+	tx, err := katzenmint.EncodeJson(katzenmint.Authority{
+		Auth:    config.Moniker,
+		Power:   1,
+		PubKey:  pv.Key.PubKey.Bytes(),
+		KeyType: pv.Key.PubKey.Type(),
+	})
+	if err != nil {
+		return err
+	}
+
+	// connect to peers and post transaction
+	peers := append(
+		strings.Split(config.P2P.PersistentPeers, ","),
+		strings.Split(config.P2P.Seeds, ",")...,
+	)
+	for _, element := range peers {
+		addr := strings.Trim(element, " ")
+		rpc, err := http.New(addr, "/websocket")
+		if err != nil {
+			continue
+		}
+		resp, err := rpc.BroadcastTxSync(context.Background(), tx)
+		if err == nil && resp.Code == abci.CodeTypeOK {
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot connect and broadcast to peers")
 }
 
 func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) (node *nm.Node, err error) {
@@ -109,6 +148,11 @@ func main() {
 	app := katzenmint.NewKatzenmintApplication(kConfig, db, logger)
 	node, err := newTendermint(app, config, logger)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(2)
+	}
+
+	if err = joinNetwork(config); err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
 		os.Exit(2)
 	}

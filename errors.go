@@ -21,7 +21,7 @@ var (
 	// Transaction Common Errors
 	ErrTxIsNotValidJSON     = KatzenmintError{Code: 0x01, Msg: "transaction is not valid json string"}
 	ErrTxWrongPublicKeySize = KatzenmintError{Code: 0x02, Msg: "wrong public key size in transaction"}
-	ErrTxWrongSignatureSize = KatzenmintError{Code: 0x03, Msg: "wrong public key size in transaction"}
+	ErrTxWrongSignatureSize = KatzenmintError{Code: 0x03, Msg: "wrong signature size in transaction"}
 	ErrTxWrongSignature     = KatzenmintError{Code: 0x04, Msg: "wrong signature in transaction"}
 
 	// Transaction Specific Errors

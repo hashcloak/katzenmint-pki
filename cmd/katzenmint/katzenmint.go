@@ -4,6 +4,7 @@ import (
 	//"errors"
 
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	katzenmint "github.com/hashcloak/katzenmint-pki"
 	kcfg "github.com/hashcloak/katzenmint-pki/config"
+	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/spf13/viper"
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
@@ -50,13 +52,53 @@ func readConfig(configFile string) (config *cfg.Config, err error) {
 	return
 }
 
+func getRpcAddresses(config *cfg.Config) []string {
+	var rpcAddr []string
+	peers := append(
+		strings.Split(config.P2P.PersistentPeers, ","),
+		strings.Split(config.P2P.Seeds, ",")...,
+	)
+	for _, element := range peers {
+		element = strings.Trim(element, " ")
+		if element == "" {
+			continue
+		}
+		parsed := strings.Split(element, "@")
+		ipAddr := strings.Split(parsed[len(parsed)-1], ":")[0]
+		rpcAddr = append(rpcAddr, "tcp://"+ipAddr+":26657")
+	}
+	return rpcAddr
+}
+
 func joinNetwork(config *cfg.Config) error {
-	// prepare AddAuthority transaction
+	// connect to peers
+	var rpc *http.HTTP
+	var err error
+	for _, addr := range getRpcAddresses(config) {
+		rpc, err = http.New(addr, "/websocket")
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		} else {
+			break
+		}
+	}
+	if rpc == nil {
+		return fmt.Errorf("cannot connect and broadcast to peers")
+	}
+
+	// load keys
 	pv := privval.LoadFilePV(
 		config.PrivValidatorKeyFile(),
 		config.PrivValidatorStateFile(),
 	)
-	tx, err := katzenmint.EncodeJson(katzenmint.Authority{
+	privKey := new(eddsa.PrivateKey)
+	err = privKey.FromBytes(pv.Key.PrivKey.Bytes())
+	if err != nil {
+		return err
+	}
+
+	// prepare AddAuthority transaction
+	raw, err := katzenmint.EncodeJson(katzenmint.Authority{
 		Auth:    config.Moniker,
 		Power:   1,
 		PubKey:  pv.Key.PubKey.Bytes(),
@@ -65,24 +107,25 @@ func joinNetwork(config *cfg.Config) error {
 	if err != nil {
 		return err
 	}
-
-	// connect to peers and post transaction
-	peers := append(
-		strings.Split(config.P2P.PersistentPeers, ","),
-		strings.Split(config.P2P.Seeds, ",")...,
-	)
-	for _, element := range peers {
-		addr := strings.Trim(element, " ")
-		rpc, err := http.New(addr, "/websocket")
-		if err != nil {
-			continue
-		}
-		resp, err := rpc.BroadcastTxSync(context.Background(), tx)
-		if err == nil && resp.Code == abci.CodeTypeOK {
-			return nil
-		}
+	info, err := rpc.ABCIInfo(context.Background())
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("cannot connect and broadcast to peers")
+	epoch, _ := binary.Uvarint(katzenmint.DecodeHex(info.Response.Data))
+	tx, err := katzenmint.FormTransaction(katzenmint.AddNewAuthority, epoch, string(raw), privKey)
+	if err != nil {
+		return err
+	}
+
+	// post transaction
+	resp, err := rpc.BroadcastTxSync(context.Background(), tx)
+	if err != nil {
+		return err
+	}
+	if resp.Code != abci.CodeTypeOK {
+		return fmt.Errorf("broadcast tx error: %v", resp.Log)
+	}
+	return nil
 }
 
 func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) (node *nm.Node, err error) {
@@ -141,32 +184,32 @@ func main() {
 
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	if logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse log level: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to parse log level: %v\n", err)
 		os.Exit(1)
 	}
 
 	app := katzenmint.NewKatzenmintApplication(kConfig, db, logger)
 	node, err := newTendermint(app, config, logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(2)
 	}
 
 	if !kConfig.Membership {
 		err = joinNetwork(config)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v", err)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 			os.Exit(2)
 		}
 		kConfig.Membership = true
 		err = kcfg.SaveFile(configFile, kConfig)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error saving config: %v", err)
+			fmt.Fprintf(os.Stderr, "error saving config: %v\n", err)
 		}
 	}
 
 	if err = node.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(2)
 	}
 	defer func() {

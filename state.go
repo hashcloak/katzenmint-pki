@@ -358,27 +358,7 @@ func (state *KatzenmintState) GetAuthorized(addr string) (pc.PublicKey, bool) {
 
 func (state *KatzenmintState) isDescriptorAuthorized(desc *pki.MixDescriptor) bool {
 	return true
-	/*
-		pk := desc.IdentityKey.ByteArray()
-		switch desc.Layer {
-		case 0:
-		 	return state.authorizedMixes[pk]
-		case pki.LayerProvider:
-			// check authorities, should use validator address
-			_, ok := state.validators[bytesToAddress(pk)]
-			return ok
-		default:
-			return false
-		}
-	*/
 }
-
-// Deprecated
-/*
-	func (state *KatzenmintState) isDocumentAuthorized(doc *pki.Document) bool {
-		return true
-	}
-*/
 
 func (state *KatzenmintState) Set(key []byte, value []byte) error {
 	state.tree.Set(key, value)
@@ -452,11 +432,6 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 		d.raw = rawDesc
 		m[pk] = d
 	})
-
-	/*
-		id := hex.EncodeToString(desc.IdentityKey.Bytes())
-		fmt.Printf("Node %s: Successfully submitted descriptor for epoch %v.", id, epoch)
-	*/
 	return
 }
 
@@ -484,10 +459,6 @@ func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, e
 	}
 
 	state.documents[epoch] = &document{doc: doc, raw: rawDoc}
-
-	/*
-		fmt.Printf("Node: Successfully submitted document for epoch %v.", epoch)
-	*/
 	return
 }
 

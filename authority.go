@@ -19,19 +19,6 @@ type Authority struct {
 	Power int64
 }
 
-/*
-func bytesToAddress(pk [eddsa.PublicKeySize]byte) string {
-	p := make([]byte, eddsa.PublicKeySize)
-	copy(p, pk[:])
-	v := abcitypes.UpdateValidator(p, 0, "")
-	pubkey, err := cryptoenc.PubKeyFromProto(v.PubKey)
-	if err != nil {
-		return ""
-	}
-	return string(pubkey.Address())
-}
-*/
-
 func VerifyAndParseAuthority(payload []byte) (*Authority, error) {
 	authority := new(Authority)
 	dec := codec.NewDecoderBytes(payload, jsonHandle)

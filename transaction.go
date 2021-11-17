@@ -34,7 +34,7 @@ type signTransaction struct {
 // TODO: find a better way to represent the Transaction
 // maybe add nonce? switch to rlp encoding?
 // Transaction represents a transaction used to make state change, eg:
-// publish mix descriptor, add consensus document or add new authority
+// publish mix descriptor or add new authority
 type Transaction struct {
 	// version
 	Version string
@@ -51,7 +51,7 @@ type Transaction struct {
 	// hex encoded ed25519 signature (should not be 0x prefixed)
 	Signature string
 
-	// json encoded payload (mix descriptor/pki document/authority)
+	// json encoded payload (eg. mix descriptor/authority)
 	Payload string
 }
 

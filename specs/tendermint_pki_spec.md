@@ -19,195 +19,114 @@ The security goals of this Directory Authority system remain the same with the a
 - The Directory Authority servers form a peer to peer gossip amongst themselves.
 
 ### Transaction Format
-Currently, consensus documents are formatted as 
+We format the Tendermint transaction as
 ```
-type Document struct {
-	// Epoch is the epoch for which this Document instance is valid for.
+type Transaction struct {
+	// version
+	Version string
+
+	// Epoch
 	Epoch uint64
 
-	// GenesisEpoch is the epoch on which authorities started consensus
-	GenesisEpoch uint64
+	// command
+	Command Command
 
-	// SendRatePerMinute is the number of packets per minute a client can send.
-	SendRatePerMinute uint64
+	// hex encoded ed25519 public key (should not be 0x prefxied)
+	PublicKey string
 
-	// Mu is the inverse of the mean of the exponential distribution
-	// that the Sphinx packet per-hop mixing delay will be sampled from.
-	Mu float64
+	// hex encoded ed25519 signature (should not be 0x prefixed)
+	Signature string
 
-	// MuMaxDelay is the maximum Sphinx packet per-hop mixing delay in
-	// milliseconds.
-	MuMaxDelay uint64
-
-	// LambdaP is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// messages from it's FIFO egress queue or drop decoy messages if the queue
-	// is empty.
-	LambdaP float64
-
-	// LambdaPMaxDelay is the maximum time interval in milliseconds.
-	LambdaPMaxDelay uint64
-
-	// LambdaL is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// decoy loop messages.
-	LambdaL float64
-
-	// LambdaLMaxDelay is the maximum time interval in milliseconds.
-	LambdaLMaxDelay uint64
-
-	// LambdaD is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// decoy drop messages.
-	LambdaD float64
-
-	// LambdaDMaxDelay is the maximum time interval in milliseconds.
-	LambdaDMaxDelay uint64
-
-	// LambdaM is the inverse of the mean of the exponential distribution
-	// that mixes will sample to determine send timing of mix loop decoy traffic.
-	LambdaM float64
-
-	// LambdaMMaxDelay is the maximum send interval in milliseconds.
-	LambdaMMaxDelay uint64
-
-	// Topology is the mix network topology, excluding providers.
-	Topology [][]*MixDescriptor
-
-	// Providers is the list of providers that can interact with the mix
-	// network.
-	Providers []*MixDescriptor
-
-	// SharedRandomCommit used by the voting process.
-	SharedRandomCommit []byte
-
-	// SharedRandomValue produced by voting process.
-	SharedRandomValue []byte
-
-	// PriorSharedRandom used by applications that need a longer lived SRV.
-	PriorSharedRandom [][]byte
-}
-```
-where `MixDescriptor` is defined as 
-```
-type MixDescriptor struct {
-	// Name is the human readable (descriptive) node identifier.
-	Name string
-
-	// IdentityKey is the node's identity (signing) key.
-	IdentityKey *eddsa.PublicKey
-
-	// LinkKey is the node's wire protocol public key.
-	LinkKey *ecdh.PublicKey
-
-	// MixKeys is a map of epochs to Sphinx keys.
-	MixKeys map[uint64]*ecdh.PublicKey
-
-	// Addresses is the map of transport to address combinations that can
-	// be used to reach the node.
-	Addresses map[Transport][]string
-
-	// Kaetzchen is the map of provider autoresponder agents by capability
-	// to parameters.
-	Kaetzchen map[string]map[string]interface{} `json:",omitempty"`
-
-	// RegistrationHTTPAddresses is a slice of HTTP URLs used for Provider
-	// user registration. Providers of course may choose to set this to nil.
-	RegistrationHTTPAddresses []string
-
-	// Layer is the topology layer.
-	Layer uint8
-
-	// LoadWeight is the node's load balancing weight (unused).
-	LoadWeight uint8
+	// json encoded payload (eg. mix descriptor/authority)
+	Payload string
 }
 ```
 
-We make the following changes to the consensus document struct:
+We will be considering the following commands:
+- `PublishMixDescriptor`: A command to publish mix descriptors by mix nodes. 
+    - Payload is the hex representation of the json-encoded form of the `MixDescriptor` Go struct.
+	```
+	type MixDescriptor struct {
+		// Name is the human readable (descriptive) node identifier.
+		Name string
+	
+		// IdentityKey is the node's identity (signing) key.
+		IdentityKey *eddsa.PublicKey
+	
+		// LinkKey is the node's wire protocol public key.
+		LinkKey *ecdh.PublicKey
+	
+		// MixKeys is a map of epochs to Sphinx keys.
+		MixKeys map[uint64]*ecdh.PublicKey
+	
+		// Addresses is the map of transport to address combinations that can
+		// be used to reach the node.
+		Addresses map[Transport][]string
+	
+		// Kaetzchen is the map of provider autoresponder agents by capability
+		// to parameters.
+		Kaetzchen map[string]map[string]interface{} `json:",omitempty"`
+	
+		// RegistrationHTTPAddresses is a slice of HTTP URLs used for Provider
+		// user registration. Providers of course may choose to set this to nil.
+		RegistrationHTTPAddresses []string
+	
+		// Layer is the topology layer.
+		Layer uint8
+	
+		// LoadWeight is the node's load balancing weight (unused).
+		LoadWeight uint8
+	}
+	```
+
+- `AddNewAuthority`: A command to add a new authority node to the PKI System.
+    - Payload is the json-encoded form of the `Authority` Go struct.
+    ```
+	type Authority struct {
+		// Auth is the prefix of the authority.
+		Auth string
+
+		// PubKey is the validator's public key.
+		PubKey []byte
+
+		// KeyType is the validator's key type.
+		KeyType string
+
+		// Power is the voting power of the authority.
+		Power int64
+	}
+	```
+
+The consensus document will be generated using all received mix descriptors at the end of each epoch.
 ```
 type Document struct {
-	// Epoch is the epoch for which this Document instance is valid for.
-	Epoch uint64
-
-	// GenesisEpoch is the epoch on which authorities started consensus
-	GenesisEpoch uint64
-
-	// SendRatePerMinute is the number of packets per minute a client can send.
+	Version           string
+	Epoch             uint64
+	GenesisEpoch      uint64
 	SendRatePerMinute uint64
 
-	// Mu is the inverse of the mean of the exponential distribution
-	// that the Sphinx packet per-hop mixing delay will be sampled from.
-	Mu float64
-
-	// MuMaxDelay is the maximum Sphinx packet per-hop mixing delay in
-	// milliseconds.
-	MuMaxDelay uint64
-
-	// LambdaP is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// messages from it's FIFO egress queue or drop decoy messages if the queue
-	// is empty.
-	LambdaP float64
-
-	// LambdaPMaxDelay is the maximum time interval in milliseconds.
+	Mu              float64
+	MuMaxDelay      uint64
+	LambdaP         float64
 	LambdaPMaxDelay uint64
-
-	// LambdaL is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// decoy loop messages.
-	LambdaL float64
-
-	// LambdaLMaxDelay is the maximum time interval in milliseconds.
+	LambdaL         float64
 	LambdaLMaxDelay uint64
-
-	// LambdaD is the inverse of the mean of the exponential distribution
-	// that clients will sample to determine the time interval between sending
-	// decoy drop messages.
-	LambdaD float64
-
-	// LambdaDMaxDelay is the maximum time interval in milliseconds.
+	LambdaD         float64
 	LambdaDMaxDelay uint64
-
-	// LambdaM is the inverse of the mean of the exponential distribution
-	// that mixes will sample to determine send timing of mix loop decoy traffic.
-	LambdaM float64
-
-	// LambdaMMaxDelay is the maximum send interval in milliseconds.
+	LambdaM         float64
 	LambdaMMaxDelay uint64
 
-	// Topology is the mix network topology, excluding providers.
-	Topology [][]*MixDescriptor
-
-	// Providers is the list of providers that can interact with the mix
-	// network.
-	Providers []*MixDescriptor
+	Topology  [][][]byte
+	Providers [][]byte
 }
 ```
-
-Now that we are using Tendermint, we will be considering the following transactions:
-- `PublishMixDescriptor`: A transaction for posting mix descriptors by mix nodes. 
-    - Transactions are of the form `serialized_mix_descriptor` 
-        - where
-            - `serialized_mix_descriptor` is a serialized form of the `MixDescriptor` Go struct. TODO: Explicitly write down how to serialize 
-- `AddConsensusDoc`: A transaction for adding a new consensus document. 
-    - Transactions are of the form `serialized_pki_doc` 
-    - where 
-        - `serialized_pki_doc` is the serialized form of a PKI consensus document as returned by `Get(Context, epoch)`. TODO: Explicitly write down the serialization procedure 
-- `AddNewAuthority`: A transaction for adding a new authority node to the PKI System.
-    - Transactions are of the form `auth:identity_pubkey;link_pubkey;power` 
-        - where 
-            - `auth` is known as the authority set change prefix
-            - `identity_pubkey` is the authority's identity public key
-            - `link_pubkey` is the authority's link public key
-            - `power` is the authority's voting power. 
-                - To remove an authority, set its voting power to 0.
 
 ### Configuration
 
 #### Initialization
-In order to define the behavior of this chain at startup, one needs to define the parameters in the `genesis.json` file. 
+In order to define the behavior of this chain at startup, one needs to define the following parameters. 
 
-##### Parameters to set
+##### Parameters to set in the `genesis.json` file
 - `genesis_time`: Time the blockchain starts. For our pursposes, this can be the time the mixnet starts.
 - `chain_id`: ID of the blockchain. Effectively, this can change for major changes made to the blockchain. Can be used to delineate different versions of the chain.
 - `consensus_params`:
@@ -220,6 +139,11 @@ In order to define the behavior of this chain at startup, one needs to define th
 - `app_state`: Application state. May not be directly relevant for our purposes as we don't have a token.
 
 For more information about `genesis.json`, see https://github.com/tendermint/tendermint/blob/master/types/genesis.go
+
+##### Parameters to set in the katzenmint system
+- `epochInterval` in `state.go`: Number of blocks that consists of an epoch.
+- `Layers` in `katzemint.toml`: Number of layers of the mix network.
+- `MinNodesPerLayer` in `katzemint.toml`: Minimum number of mix nodes in every layer.
 
 ### Differences from current Katzenpost PKI system
 

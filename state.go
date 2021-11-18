@@ -49,10 +49,10 @@ type KatzenmintState struct {
 	layers           int
 	minNodesPerLayer int
 	parameters       *katvoting.Parameters
-	documents        map[uint64]*document
 	validators       map[string]pc.PublicKey
 	validatorUpdates []abcitypes.ValidatorUpdate
 
+	prevDocument    *document
 	prevCommitError error
 }
 
@@ -73,9 +73,9 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 		layers:           kConfig.Layers,
 		minNodesPerLayer: kConfig.MinNodesPerLayer,
 		parameters:       &kConfig.Parameters,
-		documents:        make(map[uint64]*document),
 		validators:       make(map[string]pc.PublicKey),
 		validatorUpdates: make([]abcitypes.ValidatorUpdate, 0),
+		prevDocument:     nil,
 		prevCommitError:  nil,
 	}
 
@@ -91,24 +91,18 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 		state.epochStartHeight, _ = binary.Varint(epochInfoValue[8:])
 	}
 
-	// Load documents
-	end := make([]byte, len(documentsBucket))
-	copy(end, []byte(documentsBucket))
-	end = append(end, 0xff)
-	_ = tree.IterateRange([]byte(documentsBucket), end, true, func(key, value []byte) bool {
-		id, epoch := unpackStorageKey(key)
-		if id == nil {
-			// panic(fmt.Errorf("unable to unpack storage key %v", key))
-			return true
+	// Load previous document
+	e := make([]byte, 8)
+	binary.PutUvarint(e, state.currentEpoch-1)
+	key := storageKey(documentsBucket, e, state.currentEpoch-1)
+	if val, err := state.Get(key); err == nil {
+		if doc, err := s11n.VerifyAndParseDocument(val); err == nil {
+			state.prevDocument = &document{doc: doc, raw: val}
 		}
-		if doc, err := s11n.VerifyAndParseDocument(value); err == nil {
-			state.documents[epoch] = &document{doc: doc, raw: value}
-		}
-		return false
-	})
+	}
 
 	// Load validators
-	end = make([]byte, len(authoritiesBucket))
+	end := make([]byte, len(authoritiesBucket))
 	copy(end, []byte(authoritiesBucket))
 	end = append(end, 0xff)
 	_ = tree.IterateRange([]byte(authoritiesBucket), end, true, func(key, value []byte) bool {
@@ -156,7 +150,6 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 
 	var err error
 	state.blockHeight++
-	currentEpoch := state.currentEpoch
 	if state.newDocumentRequired() {
 		var doc *document
 		if doc, err = state.generateDocument(); err == nil {
@@ -169,7 +162,7 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 		}
 	}
 	epochInfoValue := make([]byte, 16)
-	binary.PutUvarint(epochInfoValue[:8], currentEpoch)
+	binary.PutUvarint(epochInfoValue[:8], state.currentEpoch)
 	binary.PutVarint(epochInfoValue[8:], state.epochStartHeight)
 	_ = state.Set([]byte(epochInfoKey), epochInfoValue)
 	appHash, _, errSave := state.tree.SaveVersion()
@@ -226,8 +219,8 @@ func (s *KatzenmintState) generateDocument() (*document, error) {
 		return nil, errDocInsufficientDescriptor
 	}
 	sortNodesByPublicKey(nodesDesc)
-	if d, ok := s.documents[s.currentEpoch-1]; ok {
-		topology = generateTopology(nodesDesc, d.doc, s.layers)
+	if s.prevDocument != nil {
+		topology = generateTopology(nodesDesc, s.prevDocument.doc, s.layers)
 	} else {
 		topology = generateRandomTopology(nodesDesc, s.layers)
 	}
@@ -381,7 +374,7 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Ok, this is a new descriptor.
-	if state.documents[epoch] != nil {
+	if epoch < state.currentEpoch {
 		// If there is a document already, the descriptor is late, and will
 		// never appear in a document, so reject it.
 		return fmt.Errorf("state: Node %v: Late descriptor upload for for epoch %v", desc.IdentityKey, epoch)
@@ -398,26 +391,25 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 func (state *KatzenmintState) updateDocument(rawDoc []byte, doc *pki.Document, epoch uint64) (err error) {
 	// Cannot lock here
 
-	// Get the public key -> document map for the epoch.
-	m, ok := state.documents[epoch]
-	if ok {
-		if !bytes.Equal(m.raw, rawDoc) {
+	e := make([]byte, 8)
+	binary.PutUvarint(e, epoch)
+	key := storageKey(documentsBucket, e, epoch)
+
+	//  Check for duplicates
+	if existing, err := state.Get(key); err == nil {
+		if !bytes.Equal(existing, rawDoc) {
 			return fmt.Errorf("state: Conflicting document for epoch %v", epoch)
 		}
 		// Redundant uploads that don't change are harmless.
 		return nil
 	}
 
-	e := make([]byte, 8)
-	binary.PutUvarint(e, epoch)
-
 	// Persist the raw descriptor to disk.
-	key := storageKey(documentsBucket, e, epoch)
 	if err := state.Set(key, rawDoc); err != nil {
 		return err
 	}
 
-	state.documents[epoch] = &document{doc: doc, raw: rawDoc}
+	state.prevDocument = &document{doc: doc, raw: rawDoc}
 	return
 }
 

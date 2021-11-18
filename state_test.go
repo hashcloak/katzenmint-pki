@@ -102,6 +102,8 @@ func TestUpdateDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to update pki document: %+v\n", err)
 	}
+	state.currentEpoch++
+	state.epochStartHeight = state.blockHeight
 	_, err = state.Commit()
 	if err != nil {
 		t.Fatalf("Failed to commit: %v\n", err)
@@ -120,21 +122,19 @@ func TestUpdateDocument(t *testing.T) {
 	}
 
 	// test the data exists in memory
-	gotDoc, ok := state.documents[testEpoch]
-	if !ok {
+	if state.prevDocument == nil {
 		t.Fatal("Failed to get pki document from memory\n")
 	}
-	if !bytes.Equal(gotDoc.raw, sDoc) {
+	if !bytes.Equal(state.prevDocument.raw, sDoc) {
 		t.Fatalf("Got a wrong document from memory\n")
 	}
 
 	// test the data can be reloaded into memory
 	state = NewKatzenmintState(kConfig, db)
-	gotDoc, ok = state.documents[testEpoch]
-	if !ok {
+	if state.prevDocument == nil {
 		t.Fatal("Failed to reload pki document into memory\n")
 	}
-	if !bytes.Equal(gotDoc.raw, sDoc) {
+	if !bytes.Equal(state.prevDocument.raw, sDoc) {
 		t.Fatalf("Got a wrong document from reloaded memory\n")
 	}
 }
@@ -256,9 +256,8 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	}
 
 	// test the non-existence of the document
-	_, ok := state.documents[epoch]
 	_, err = state.Get(key)
-	if ok || err == nil {
+	if state.prevDocument != nil || err == nil {
 		t.Fatalf("The pki document should not be generated at this moment because there is not enough mix descriptors\n")
 	}
 
@@ -274,19 +273,17 @@ func TestDocumentGenerationUponCommit(t *testing.T) {
 	}
 
 	// test the existence of the document
-	doc, ok := state.documents[epoch]
 	_, err = state.Get(key)
-	if !ok || err != nil {
+	if state.prevDocument == nil || err != nil {
 		t.Fatalf("The pki document should be generated automatically\n")
 	}
 
 	// test the document can be reloaded
-	state = NewKatzenmintState(kConfig, db)
-	got, ok := state.documents[epoch]
-	if !ok {
+	newState := NewKatzenmintState(kConfig, db)
+	if newState.prevDocument == nil {
 		t.Fatalf("The pki document should be reloaded\n")
 	}
-	if !bytes.Equal(got.raw, doc.raw) {
+	if !bytes.Equal(newState.prevDocument.raw, state.prevDocument.raw) {
 		t.Fatalf("Reloaded doc inconsistent with the generated doc\n")
 	}
 }

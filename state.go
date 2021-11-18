@@ -11,7 +11,6 @@ import (
 	"github.com/hashcloak/katzenmint-pki/config"
 	"github.com/hashcloak/katzenmint-pki/s11n"
 	katvoting "github.com/katzenpost/authority/voting/server/config"
-	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/pki"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -51,11 +50,9 @@ type KatzenmintState struct {
 	minNodesPerLayer int
 	parameters       *katvoting.Parameters
 	documents        map[uint64]*document
-	descriptors      map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor
 	validators       map[string]pc.PublicKey
 	validatorUpdates []abcitypes.ValidatorUpdate
 
-	deferCommit     []func()
 	prevCommitError error
 }
 
@@ -77,10 +74,8 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 		minNodesPerLayer: kConfig.MinNodesPerLayer,
 		parameters:       &kConfig.Parameters,
 		documents:        make(map[uint64]*document),
-		descriptors:      make(map[uint64]map[[eddsa.PublicKeySize]byte]*descriptor),
 		validators:       make(map[string]pc.PublicKey),
 		validatorUpdates: make([]abcitypes.ValidatorUpdate, 0),
-		deferCommit:      make([]func(), 0),
 		prevCommitError:  nil,
 	}
 
@@ -108,35 +103,6 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 		}
 		if doc, err := s11n.VerifyAndParseDocument(value); err == nil {
 			state.documents[epoch] = &document{doc: doc, raw: value}
-		}
-		return false
-	})
-
-	// Load descriptors
-	end = make([]byte, len(descriptorsBucket))
-	copy(end, []byte(descriptorsBucket))
-	end = append(end, 0xff)
-	_ = tree.IterateRange([]byte(descriptorsBucket), end, true, func(key, value []byte) bool {
-		id, epoch := unpackStorageKey(key)
-		if id == nil {
-			// panic(fmt.Errorf("unable to unpack storage key %v", key))
-			return true
-		}
-		verifier, err := s11n.GetVerifierFromDescriptor(value)
-		if err == nil {
-			if !bytes.Equal(verifier.Identity(), id) {
-				// panic(fmt.Errorf("storage key id %v has another descriptor id %v", id, verifier.Identity()))
-				return true
-			}
-			desc, err := s11n.VerifyAndParseDescriptor(verifier, value, epoch)
-			if err == nil {
-				var pubkey [32]byte
-				copy(pubkey[:], id)
-				if _, ok := state.descriptors[epoch]; !ok {
-					state.descriptors[epoch] = make(map[[32]byte]*descriptor)
-				}
-				state.descriptors[epoch][pubkey] = &descriptor{desc: desc, raw: value}
-			}
 		}
 		return false
 	})
@@ -189,12 +155,6 @@ func (state *KatzenmintState) Commit() ([]byte, error) {
 	defer state.Unlock()
 
 	var err error
-	if len(state.deferCommit) > 0 {
-		for _, def := range state.deferCommit {
-			def()
-		}
-		state.deferCommit = make([]func(), 0)
-	}
 	state.blockHeight++
 	currentEpoch := state.currentEpoch
 	if state.newDocumentRequired() {
@@ -235,26 +195,41 @@ func (state *KatzenmintState) newDocumentRequired() bool {
 func (s *KatzenmintState) generateDocument() (*document, error) {
 	// Cannot lock here
 
-	// Carve out the descriptors between providers and nodes.
-	var providersDesc, nodes []*descriptor
-	for _, v := range s.descriptors[s.currentEpoch] {
+	// // Load descriptors (providers and nodesDesc).
+	var providersDesc, nodesDesc []*descriptor
+	begin := storageKey(descriptorsBucket, []byte{}, s.currentEpoch)
+	end := make([]byte, len(begin))
+	copy(end, begin)
+	end[len(end)-1] = 0xff
+	_ = s.tree.IterateRange(begin, end, true, func(key, value []byte) (ret bool) {
+		ret = false
+		id, _ := unpackStorageKey(key)
+		if id == nil {
+			return
+		}
+		desc, err := s11n.ParseDescriptorWithoutVerify(value)
+		if err != nil {
+			return
+		}
+		v := &descriptor{desc: desc, raw: value}
 		if v.desc.Layer == pki.LayerProvider {
 			providersDesc = append(providersDesc, v)
 		} else {
-			nodes = append(nodes, v)
+			nodesDesc = append(nodesDesc, v)
 		}
-	}
+		return
+	})
 
 	// Assign nodes to layers. # No randomness yet.
 	var topology [][][]byte
-	if len(nodes) < s.layers*s.minNodesPerLayer {
+	if len(nodesDesc) < s.layers*s.minNodesPerLayer {
 		return nil, errDocInsufficientDescriptor
 	}
-	sortNodesByPublicKey(nodes)
+	sortNodesByPublicKey(nodesDesc)
 	if d, ok := s.documents[s.currentEpoch-1]; ok {
-		topology = generateTopology(nodes, d.doc, s.layers)
+		topology = generateTopology(nodesDesc, d.doc, s.layers)
 	} else {
-		topology = generateRandomTopology(nodes, s.layers)
+		topology = generateRandomTopology(nodesDesc, s.layers)
 	}
 
 	// Sort the providers
@@ -388,23 +363,16 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	state.Lock()
 	defer state.Unlock()
 
-	pk := desc.IdentityKey.ByteArray()
-
-	// Get the public key -> descriptor map for the epoch.
-	m, ok := state.descriptors[epoch]
-	if !ok {
-		m = make(map[[eddsa.PublicKeySize]byte]*descriptor)
-		state.descriptors[epoch] = m
-	}
+	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), epoch)
 
 	// Check for redundant uploads.
-	if d, ok := m[pk]; ok {
-		if d.raw == nil {
+	if existing, err := state.Get(key); err == nil {
+		if existing == nil {
 			return fmt.Errorf("state: Wtf, raw field of descriptor for epoch %v is nil", epoch)
 		}
 		// If the descriptor changes, then it will be rejected to prevent
 		// nodes from reneging on uploads.
-		if !bytes.Equal(d.raw, rawDesc) {
+		if !bytes.Equal(existing, rawDesc) {
 			return fmt.Errorf("state: Node %v: Conflicting descriptor for epoch %v", desc.IdentityKey, epoch)
 		}
 
@@ -420,18 +388,9 @@ func (state *KatzenmintState) updateMixDescriptor(rawDesc []byte, desc *pki.MixD
 	}
 
 	// Persist the raw descriptor to disk.
-	key := storageKey(descriptorsBucket, desc.IdentityKey.Bytes(), epoch)
 	if err := state.Set(key, rawDesc); err != nil {
 		return err
 	}
-
-	// Store the raw descriptor and the parsed struct.
-	state.deferCommit = append(state.deferCommit, func() {
-		d := new(descriptor)
-		d.desc = desc
-		d.raw = rawDesc
-		m[pk] = d
-	})
 	return
 }
 

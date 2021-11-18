@@ -79,34 +79,6 @@ func TestUpdateDescriptor(t *testing.T) {
 	if !bytes.Equal(gotRaw, rawDesc) {
 		t.Fatalf("Got a wrong descriptor from database\n")
 	}
-
-	// test the data exists in memory
-	pk := desc.IdentityKey.ByteArray()
-	if m, ok := state.descriptors[testEpoch]; !ok {
-		t.Fatal("Failed to get mix descriptor from memory\n")
-	} else {
-		gotDesc, ok := m[pk]
-		if !ok {
-			t.Fatal("Failed to get mix descriptor from memory\n")
-		}
-		if !bytes.Equal(gotDesc.raw, rawDesc) {
-			t.Fatalf("Got a wrong descriptor from memory\n")
-		}
-	}
-
-	// test the data can be reloaded into memory
-	state = NewKatzenmintState(kConfig, db)
-	if m, ok := state.descriptors[testEpoch]; !ok {
-		t.Fatal("Failed to reload mix descriptor into memory\n")
-	} else {
-		gotDesc, ok := m[pk]
-		if !ok {
-			t.Fatal("Failed to reload mix descriptor into memory\n")
-		}
-		if !bytes.Equal(gotDesc.raw, rawDesc) {
-			t.Fatalf("Got a wrong descriptor from reloaded memory\n")
-		}
-	}
 }
 
 func TestUpdateDocument(t *testing.T) {

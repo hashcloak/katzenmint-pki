@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ProtocolVersion string = "v0.0.1"
+	ProtocolVersion string = "dev0.0"
 )
 
 var (

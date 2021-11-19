@@ -1,5 +1,9 @@
 GOPATH=$(shell go env GOPATH)
 GOTAGS="badgerdb"
+VERSION := $(shell git describe --tags 2>/dev/null)
+ifneq ($(VERSION), )
+LD_FLAGS=-ldflags "-X app.ProtocolVersion=$(VERSION)"
+endif
 
 .PHONY: default
 default: lint test
@@ -25,7 +29,7 @@ setup:
 
 .PHONY: build
 build:
-	go build -tags=$(GOTAGS) -o katzenmint cmd/katzenmint/katzenmint.go
+	go build -tags=$(GOTAGS) $(LD_FLAGS) -o katzenmint cmd/katzenmint/katzenmint.go
 
 .PHONY: docker-build
 docker-build:

@@ -2,6 +2,7 @@ TendermintConfigPath="./chain/config/config.toml"
 DBPath="./data"
 Layers=1
 MinNodesPerLayer=1
+Membership=true
 
 [Parameters]
   Mu=0.1

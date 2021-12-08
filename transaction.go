@@ -111,7 +111,7 @@ func (tx *Transaction) Address() string {
 // FormTransaction returns the crafted transaction that can be posted
 func FormTransaction(command Command, epoch uint64, payload string, privKey *eddsa.PrivateKey) ([]byte, error) {
 	tx := &Transaction{
-		Version:   ProtocolVersion,
+		Version:   protocolVersion,
 		Epoch:     epoch,
 		Command:   command,
 		Payload:   payload,

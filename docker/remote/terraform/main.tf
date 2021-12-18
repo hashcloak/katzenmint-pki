@@ -14,7 +14,7 @@ variable "DO_API_TOKEN" {
 
 variable "TESTNET_NAME" {
   description = "Name of the testnet"
-  default = "sentrynet"
+  default = "cyclotron"
 }
 
 variable "SSH_KEY_FILE" {

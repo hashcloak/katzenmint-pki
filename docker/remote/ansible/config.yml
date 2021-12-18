@@ -11,7 +11,7 @@
     - service: katzenmint
     - N: 3
   roles:
-    - katzenmint/stop
+    # - katzenmint/stop
     - katzenmint/config
     - katzenmint/unsafe_reset
     - katzenmint/start
@@ -22,11 +22,11 @@
   gather_facts: yes
   vars:
     - service: mix
-    - N: 3
+    - N: 5
   roles:
     - mixes/stop
     - mixes/config
-    - mixes/unsafe_reset
+    # - mixes/unsafe_reset
     - mixes/start
 
 - hosts: providernet
@@ -35,9 +35,9 @@
   gather_facts: yes
   vars:
     - service: provider
-    - N: 2
+    - N: 7
   roles:
     - providers/stop
     - providers/config
-    - providers/unsafe_reset
+    # - providers/unsafe_reset
     - providers/start

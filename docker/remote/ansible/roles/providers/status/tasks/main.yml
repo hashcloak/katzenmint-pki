@@ -2,6 +2,18 @@
 
 - name: application service status
   command: "service {{service}} status"
+  # command: "meson-server -f /home/provider/.provider/katzenpost.toml -t"
+  # command: "lsof +D /home/mix/.mix/kdata/data-db.db"
+  # command: "cat /etc/systemd/system/{{service}}.service"
+  # command: "systemctl stop mix"
+  # command: "kill 16359"
+  # command: "meson-server -f /home/mix/.mix/katzenpost.toml -t"
+  # command: "rm -rf /home/mix/.mix/kdata/*"
+  # command: "ls -l /home/provider/.provider"
+  # command: "chmod -R 700 /home/mix/.mix"
+  # command: "yum install lsof -y"
+  # command: "ps -u {{service}}"
+  # command: "ss -tulpn | grep :30006"
   changed_when: false
   register: status
 

@@ -11,7 +11,7 @@
     - service: katzenmint
     - N: 3
   roles:
-    # - katzenmint/stop
+    - katzenmint/stop
     - katzenmint/config
     - katzenmint/unsafe_reset
     - katzenmint/start
@@ -26,7 +26,7 @@
   roles:
     - mixes/stop
     - mixes/config
-    # - mixes/unsafe_reset
+    - mixes/unsafe_reset
     - mixes/start
 
 - hosts: providernet
@@ -39,5 +39,5 @@
   roles:
     - providers/stop
     - providers/config
-    # - providers/unsafe_reset
+    - providers/unsafe_reset
     - providers/start

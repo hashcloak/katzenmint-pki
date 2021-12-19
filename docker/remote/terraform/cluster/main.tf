@@ -17,7 +17,7 @@ resource "digitalocean_ssh_key" "cluster" {
 }
 
 resource "digitalocean_droplet" "cluster" {
-  name = "${var.name}-node${count.index}"
+  name = "${var.name}-${element(var.tags, count.index)}-node${count.index}"
   image = "centos-7-x64"
   size = "${var.instance_size}"
   region = "${element(var.regions, count.index)}"

@@ -70,7 +70,7 @@ func getRpcAddresses(config *cfg.Config) []string {
 	return rpcAddr
 }
 
-func joinNetwork(config *cfg.Config) error {
+func participateNetwork(config *cfg.Config, power int64) error {
 	// connect to peers
 	var rpc *http.HTTP
 	var err error
@@ -100,7 +100,7 @@ func joinNetwork(config *cfg.Config) error {
 	// prepare AddAuthority transaction
 	raw, err := katzenmint.EncodeJson(katzenmint.Authority{
 		Auth:    config.Moniker,
-		Power:   1,
+		Power:   power,
 		PubKey:  pv.Key.PubKey.Bytes(),
 		KeyType: pv.Key.PubKey.Type(),
 	})
@@ -126,6 +126,32 @@ func joinNetwork(config *cfg.Config) error {
 		return fmt.Errorf("broadcast tx error: %v", resp.Log)
 	}
 	return nil
+}
+
+func joinNetwork(kConfig *kcfg.Config, config *cfg.Config) {
+	err := participateNetwork(config, 1)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(2)
+	}
+	kConfig.Membership = true
+	err = kcfg.SaveFile(configFile, kConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error saving config: %v\n", err)
+	}
+}
+
+func leaveNetwork(kConfig *kcfg.Config, config *cfg.Config) {
+	err := participateNetwork(config, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+	} else {
+		kConfig.Membership = false
+		err = kcfg.SaveFile(configFile, kConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error saving config: %v\n", err)
+		}
+	}
 }
 
 func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) (node *nm.Node, err error) {
@@ -194,20 +220,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(2)
 	}
-
 	if !kConfig.Membership {
-		err = joinNetwork(config)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(2)
-		}
-		kConfig.Membership = true
-		err = kcfg.SaveFile(configFile, kConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error saving config: %v\n", err)
-		}
+		joinNetwork(kConfig, config)
 	}
-
 	if err = node.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(2)
@@ -220,5 +235,6 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
+	leaveNetwork(kConfig, config)
 	os.Exit(0)
 }

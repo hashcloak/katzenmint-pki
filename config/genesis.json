@@ -47,15 +47,6 @@
       },
       "power": "1",
       "name": "node2"
-    },
-    {
-      "address": "4A7200E91FB88A96205E719F072103304D9E3070",
-      "pub_key": {
-        "type": "tendermint/PubKeyEd25519",
-        "value": "8FWIlSIf51M57s4b5qtM10zsHrmdOIax6uY7jKeLF9Q="
-      },
-      "power": "1",
-      "name": "node3"
     }
   ],
   "app_hash": ""

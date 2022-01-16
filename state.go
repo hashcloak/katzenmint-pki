@@ -83,7 +83,7 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	epochInfoValue, err := state.Get([]byte(epochInfoKey))
 	if version == 0 {
 		state.currentEpoch = genesisEpoch
-		state.epochStartHeight = -epochInterval
+		state.epochStartHeight = 0
 	} else if err != nil || epochInfoValue == nil || len(epochInfoValue) != 16 {
 		panic("error loading the current epoch number and its starting height")
 	} else {

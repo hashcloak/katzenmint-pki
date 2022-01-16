@@ -20,7 +20,7 @@ import (
 )
 
 const genesisEpoch uint64 = 1
-const epochInterval int64 = 5
+const epochInterval int64 = 10
 
 var (
 	errDocInsufficientDescriptor = errors.New("insufficient descriptors uploaded")
@@ -83,7 +83,7 @@ func NewKatzenmintState(kConfig *config.Config, db dbm.DB) *KatzenmintState {
 	epochInfoValue, err := state.Get([]byte(epochInfoKey))
 	if version == 0 {
 		state.currentEpoch = genesisEpoch
-		state.epochStartHeight = 0
+		state.epochStartHeight = -epochInterval
 	} else if err != nil || epochInfoValue == nil || len(epochInfoValue) != 16 {
 		panic("error loading the current epoch number and its starting height")
 	} else {

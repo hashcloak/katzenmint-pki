@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -30,12 +31,13 @@ import (
 )
 
 var (
-	configFile string
+	configFile  string
+	logToStdout bool
 )
 
 func readConfig(configFile string) (config *cfg.Config, err error) {
 	config = cfg.DefaultConfig()
-	config.RootDir = filepath.Dir(filepath.Dir(configFile))
+	config.SetRoot(filepath.Dir(filepath.Dir(configFile)))
 	viper.SetConfigFile(configFile)
 	if err = viper.ReadInConfig(); err != nil {
 		err = fmt.Errorf("viper failed to read config file: %w", err)
@@ -161,6 +163,7 @@ func newTendermint(app abci.Application, config *cfg.Config, logger log.Logger) 
 
 func init() {
 	flag.StringVar(&configFile, "config", "katzenmint.toml", "Path to katzenmint.toml")
+	flag.BoolVar(&logToStdout, "stdout", false, "Whether to write log into stdout")
 	flag.Parse()
 }
 
@@ -182,7 +185,17 @@ func main() {
 	}
 	defer db.Close()
 
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	var logger log.Logger
+	if logToStdout {
+		logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	} else {
+		f, err := os.Create(path.Join(kConfig.DBPath, "katzenmint.log"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to create log file: %v\n", err)
+			os.Exit(1)
+		}
+		logger = log.NewTMLogger(log.NewSyncWriter(f))
+	}
 	if logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to parse log level: %v\n", err)
 		os.Exit(1)

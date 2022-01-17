@@ -1,8 +1,14 @@
 GOPATH=$(shell go env GOPATH)
 GOTAGS="badgerdb"
-VERSION := $(shell git describe --tags 2>/dev/null)
+VERSION:=$(shell git describe --tags 2>/dev/null)
+BUILDTIME=$(shell date +"%d %b %Y")
+LD_FLAGS=
 ifneq ($(VERSION), )
-LD_FLAGS=-ldflags "-X app.ProtocolVersion=$(VERSION)"
+LD_FLAGS:= -X "github.com/hashcloak/katzenmint-pki.protocolVersion=$(VERSION)"
+endif
+
+ifneq ($(BUILDTIME), )
+LD_FLAGS:= $(LD_FLAGS) -X "github.com/hashcloak/katzenmint-pki.buildTime=${BUILDTIME}"
 endif
 
 .PHONY: default
@@ -29,7 +35,7 @@ setup:
 
 .PHONY: build
 build:
-	go build -tags=$(GOTAGS) $(LD_FLAGS) -o katzenmint cmd/katzenmint/katzenmint.go
+	go build -tags=$(GOTAGS) -ldflags '$(LD_FLAGS)' -o katzenmint cmd/katzenmint/katzenmint.go
 
 .PHONY: docker-build
 docker-build:

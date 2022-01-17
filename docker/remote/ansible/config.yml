@@ -22,7 +22,7 @@
   gather_facts: yes
   vars:
     - service: mix
-    - N: 3
+    - N: 5
   roles:
     - mixes/stop
     - mixes/config
@@ -35,7 +35,7 @@
   gather_facts: yes
   vars:
     - service: provider
-    - N: 2
+    - N: 7
   roles:
     - providers/stop
     - providers/config

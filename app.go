@@ -12,18 +12,17 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	"github.com/tendermint/tendermint/version"
 	dbm "github.com/tendermint/tm-db"
 	"github.com/ugorji/go/codec"
-	// "github.com/tendermint/tendermint/version"
 	// cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 )
 
-const (
-	ProtocolVersion string = "dev0.0"
-)
-
 var (
-	_ abcitypes.Application = (*KatzenmintApplication)(nil)
+	_               abcitypes.Application = (*KatzenmintApplication)(nil)
+	protocolVersion string                = "development"
+	buildTime       string                = "2021"
+	appVersion      uint64                = 1
 )
 
 type KatzenmintApplication struct {
@@ -45,8 +44,8 @@ func (app *KatzenmintApplication) Info(req abcitypes.RequestInfo) abcitypes.Resp
 	binary.BigEndian.PutUint64(epoch[:], app.state.currentEpoch)
 	return abcitypes.ResponseInfo{
 		Data: fmt.Sprint(app.state.currentEpoch),
-		// Version:          version.ABCIVersion,
-		// AppVersion:       ProtocolVersion,
+		Version:          fmt.Sprintf("%s/%s/%s", protocolVersion, version.ABCIVersion, buildTime),
+		AppVersion:       appVersion,
 		LastBlockHeight:  app.state.blockHeight,
 		LastBlockAppHash: app.state.appHash,
 	}

@@ -161,7 +161,7 @@ func TestPostDescriptorAndCommit(t *testing.T) {
 
 	// make a query for the doc
 	query, err := EncodeJson(Query{
-		Version: ProtocolVersion,
+		Version: protocolVersion,
 		Epoch:   epoch,
 		Command: GetConsensus,
 		Payload: "",
